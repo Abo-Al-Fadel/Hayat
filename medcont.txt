@@ -1,0 +1,104 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+[ApiController]
+[Route("api/[controller]")]
+public class MedicineController : ControllerBase
+{
+    private readonly PharmacyDbContext _context;
+
+    public MedicineController(PharmacyDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet]
+    [Authorize]
+    public async Task<IActionResult> GetAll([FromQuery] string? name, [FromQuery] decimal? minPrice, [FromQuery] decimal? maxPrice)
+    {
+        try
+        {
+            var query = _context.Medicines.AsQueryable();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                query = query.Where(m => m.Name.Contains(name));
+            }
+            if (minPrice.HasValue)
+                query = query.Where(m => m.Price >= minPrice.Value);
+
+            if (maxPrice.HasValue)
+                query = query.Where(m => m.Price <= maxPrice.Value);
+
+            var medicines = await query.ToListAsync();
+            return Ok(medicines);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { Message = "An error occurred while fetching medicines.", Details = ex.Message });
+        }
+    }
+
+    [HttpPost]
+    [AllowAnonymous]
+    public async Task<IActionResult> Add([FromBody] Medicine medicine)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            _context.Medicines.Add(medicine);
+            await _context.SaveChangesAsync();
+            return Ok(medicine);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { Message = "An error occurred while adding the medicine.", Details = ex.Message });
+        }
+
+    }
+    [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Update(int id, [FromBody] Medicine medicine)
+    {
+        try
+        {
+            var existing = await _context.Medicines.FindAsync(id);
+            if (existing == null)
+                return NotFound();
+
+            existing.Name = medicine.Name;
+            existing.Quantity = medicine.Quantity;
+            existing.Price = medicine.Price;
+
+            await _context.SaveChangesAsync();
+            return Ok(existing);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { Message = "An error occurred while updating the medicine.", Details = ex.Message });
+        }
+    }
+
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        try
+        {
+            var medicine = await _context.Medicines.FindAsync(id);
+            if (medicine == null)
+                return NotFound();
+
+            _context.Medicines.Remove(medicine);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { Message = "An error occurred while deleting the medicine.", Details = ex.Message });
+        }
+    }
+    
+}

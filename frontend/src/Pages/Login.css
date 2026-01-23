@@ -1,0 +1,17 @@
+.bg-loginpage {
+   background-image: url('../Images/loginBack.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* keep children contained */
+  overflow: hidden;
+}
+
+/* global reset (put in index.css if not already present) */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;  /* prevent horizontal scroll from stray absolute elements */
+}
+

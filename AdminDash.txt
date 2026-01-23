@@ -1,0 +1,472 @@
+// AdminDashboard.tsx
+import React, { JSX, useEffect, useState } from "react";
+import logo from "../Images/HL.png";
+import colageno from "../Images/Colageno.png";
+import panadol from "../Images/panadol.png";
+import EspecialGreen from "../Images/EspecialGreen.png";
+import Tylenol from "../Images/Tylenol.png";
+import Creatine from "../Images/Creatine.png";
+import protein from "../Images/protein.png";
+
+import {
+  Sun,
+  Moon,
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Search,
+  Eye,
+  EyeOff,
+  Plus,
+  Minus,
+  Upload,
+} from "lucide-react";
+
+type Page = "dashboard" | "products" | "orders";
+
+interface Product {
+  id: number;
+  name: string;
+  price: number;
+  image: string;
+  stock: number;
+  hidden?: boolean;
+}
+
+const LOCAL_KEY = "hayaa_products_v3";
+
+const defaultProducts: Product[] = [
+  { id: 1, name: "Colageno", price: 196.84, image: colageno, stock: 20, hidden: false },
+  { id: 2, name: "Panadol Femina", price: 196.84, image: panadol, stock: 12, hidden: false },
+  { id: 3, name: "Especial Green", price: 196.84, image: EspecialGreen, stock: 8, hidden: false },
+  { id: 4, name: "Tylenol Acetaminophen", price: 196.84, image: Tylenol, stock: 30, hidden: false },
+  { id: 5, name: "Micronized Creatine", price: 196.84, image: Creatine, stock: 6, hidden: false },
+  { id: 6, name: "Whey Protein Powder", price: 196.84, image: protein, stock: 15, hidden: false },
+];
+
+export default function AdminDashboard(): JSX.Element {
+  const [darkMode, setDarkMode] = useState(false);
+  const [activePage, setActivePage] = useState<Page>("dashboard");
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const raw = localStorage.getItem(LOCAL_KEY);
+      if (raw) return JSON.parse(raw) as Product[];
+    } catch {}
+    return defaultProducts;
+  });
+  const [savedProducts, setSavedProducts] = useState<Product[]>(products);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [newProduct, setNewProduct] = useState<Partial<Product>>({
+    name: "",
+    price: 0,
+    stock: 0,
+    image: "",
+  });
+
+  useEffect(() => {
+    if (darkMode) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
+  }, [darkMode]);
+
+  const isDirty = JSON.stringify(products) !== JSON.stringify(savedProducts);
+
+  // ---------- handlers ----------
+  const setPrice = (id: number, raw: string) => {
+    const parsed = parseFloat(raw);
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id ? { ...p, price: Number.isFinite(parsed) ? Math.max(0, parsed) : p.price } : p
+      )
+    );
+  };
+
+  const setStock = (id: number, raw: string) => {
+    const parsed = parseInt(raw, 10);
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              stock: Number.isFinite(parsed) ? Math.max(0, parsed) : p.stock,
+              hidden: parsed <= 0 ? true : false,
+            }
+          : p
+      )
+    );
+  };
+
+  const changeStock = (id: number, delta: number) => {
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (p.id === id) {
+          const newStock = Math.max(0, p.stock + delta);
+          return { ...p, stock: newStock, hidden: newStock <= 0 };
+        }
+        return p;
+      })
+    );
+  };
+
+  const toggleHidden = (id: number) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, hidden: !p.hidden } : p))
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await new Promise((res) => setTimeout(res, 500));
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(products));
+    setSavedProducts(products);
+    setSaving(false);
+  };
+
+  const handleUndo = () => setProducts(savedProducts);
+
+  const addNewProduct = () => {
+    if (!newProduct.name || !newProduct.image) return;
+    const id = Math.max(0, ...products.map((p) => p.id)) + 1;
+    const product: Product = {
+      id,
+      name: newProduct.name,
+      price: newProduct.price ?? 0,
+      stock: newProduct.stock ?? 0,
+      image: newProduct.image,
+      hidden: (newProduct.stock ?? 0) <= 0,
+    };
+    setProducts([product, ...products]);
+    setNewProduct({ name: "", price: 0, stock: 0, image: "" });
+  };
+
+  const handleFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewProduct((prev) => ({ ...prev, image: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const filtered = products.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Stats
+  const totalStock = products.reduce((sum, p) => sum + p.stock, 0);
+  const hiddenCount = products.filter((p) => p.hidden).length;
+
+  return (
+    <div className="h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
+      <div className="flex h-full">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white dark:bg-gray-800 shadow-lg p-4 flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
+            <img src={logo} alt="Hayaa Logo" className="h-10 w-auto" />
+            <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200">Admin Panel</h2>
+          </div>
+
+          <nav className="flex flex-col gap-3">
+            <button
+              onClick={() => setActivePage("dashboard")}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition ${
+                activePage === "dashboard"
+                  ? "bg-purple-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-purple-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <LayoutDashboard size={18} /> Dashboard
+            </button>
+            <button
+              onClick={() => setActivePage("products")}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition ${
+                activePage === "products"
+                  ? "bg-purple-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-purple-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <Package size={18} /> Products
+            </button>
+            <button
+              onClick={() => setActivePage("orders")}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition ${
+                activePage === "orders"
+                  ? "bg-purple-600 text-white"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-purple-100 dark:hover:bg-gray-700"
+              }`}
+            >
+              <ShoppingCart size={18} /> Orders
+            </button>
+          </nav>
+        </aside>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Top Navbar */}
+          <header className="h-16 bg-white dark:bg-gray-800 shadow-md flex items-center justify-between px-6">
+            <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+              {activePage.charAt(0).toUpperCase() + activePage.slice(1)}
+            </h1>
+
+            {activePage === "products" && (
+              <div className="relative">
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search products..."
+                  className="w-72 rounded-full px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-100"
+                />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-300" />
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleUndo}
+                disabled={!isDirty || saving}
+                className="px-3 py-1 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 disabled:opacity-40 transition"
+              >
+                Undo
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!isDirty || saving}
+                className="px-3 py-1 rounded-md bg-purple-600 hover:bg-purple-700 text-white text-sm shadow-lg transition disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+              >
+                {darkMode ? (
+                  <Sun className="h-5 w-5 text-yellow-400" />
+                ) : (
+                  <Moon className="h-5 w-5 text-gray-600" />
+                )}
+              </button>
+            </div>
+          </header>
+
+          {/* Page Content */}
+          <main className="flex-1 p-6 overflow-y-auto text-gray-800 dark:text-gray-200">
+            {activePage === "dashboard" && (
+              <div className="grid grid-cols-3 gap-6">
+                <div className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow">
+                  <h3 className="text-sm text-gray-500">Total Medicines</h3>
+                  <p className="text-2xl font-bold">{products.length}</p>
+                </div>
+                <div className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow">
+                  <h3 className="text-sm text-gray-500">Total Stock</h3>
+                  <p className="text-2xl font-bold">{totalStock}</p>
+                </div>
+                <div className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow">
+                  <h3 className="text-sm text-gray-500">Hidden</h3>
+                  <p className="text-2xl font-bold">{hiddenCount}</p>
+                </div>
+              </div>
+            )}
+
+            {activePage === "products" && (
+              <div>
+                <h2 className="text-xl font-bold mb-6">Manage Products</h2>
+
+                {/* Add New Product */}
+                <div className="flex flex-wrap items-center gap-4 p-4 mb-6 rounded-xl shadow-md bg-green-50 dark:bg-gray-800">
+                  {/* Image Upload */}
+                  <div className="flex items-center justify-center h-24 w-24 rounded-lg border-2 border-dashed border-green-400 bg-white dark:bg-gray-700">
+                    {newProduct.image ? (
+                      <img src={newProduct.image} alt="Preview" className="max-h-20 max-w-20 object-contain" />
+                    ) : (
+                      <label className="cursor-pointer flex flex-col items-center text-xs text-green-600">
+                        <Upload className="h-6 w-6 mb-1" />
+                        Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => e.target.files && handleFile(e.target.files[0])}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <div className="flex flex-col justify-center flex-1 h-12">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Medicine Name</label>
+                    <input
+                      placeholder="Medicine name"
+                      value={newProduct.name}
+                      onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))}
+                      className="w-full h-8 px-3 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    />
+                  </div>
+
+                  {/* Price */}
+                  <div className="flex flex-col items-center justify-center">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Price</label>
+                    <div className="flex items-center h-8">
+                      <span className="mr-1">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="0.00"
+                        value={newProduct.price}
+                        onChange={(e) => setNewProduct((p) => ({ ...p, price: parseFloat(e.target.value) }))}
+                        className="w-28 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Stock */}
+                  <div className="flex flex-col items-center justify-center">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock</label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={newProduct.stock}
+                      onChange={(e) => setNewProduct((p) => ({ ...p, stock: parseInt(e.target.value, 10) }))}
+                      className="w-24 h-8 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                    />
+                  </div>
+
+                  {/* Add Button */}
+                  <button 
+                    onClick={addNewProduct}
+                    className="px-4 py-2 h-10 mt-4 bg-green-600 hover:bg-green-700 text-white rounded-md"
+                  >
+                    Add
+                  </button>
+                </div>
+
+
+                {/* Product list */}
+                <div className="space-y-4">
+                  {filtered.map((product) => (
+                    <div
+                      key={product.id}
+                      className={`flex items-center gap-4 p-4 rounded-xl shadow-md ${
+                        product.hidden ? "opacity-60" : darkMode ? "bg-gray-900" : "bg-white"
+                      }`}
+                    >
+                      {/* Image */}
+                      <div
+                        className={`flex items-center justify-center h-28 w-28 rounded-lg flex-shrink-0 ${
+                          darkMode
+                            ? "bg-[radial-gradient(circle_at_center,#2d2d30,#1f1f22,#141416)]"
+                            : "bg-[radial-gradient(circle_at_center,#f2f3f4,#e9eaec,#d4d5d6)]"
+                        }`}
+                      >
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="max-h-24 max-w-24 object-contain drop-shadow-md"
+                        />
+                      </div>
+
+                      {/* Name + ID */}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-base truncate">{product.name}</h3>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">ID: {product.id}</div>
+                      </div>
+
+                      {/* Price */}
+                      <div className="w-48 flex flex-col items-center">
+                        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Price</label>
+                        <div className="flex items-center">
+                          <span className="mr-1">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={product.price.toFixed(2)}
+                            onChange={(e) => setPrice(product.id, e.target.value)}
+                            className="w-28 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Stock with + / - */}
+                      <div className="w-40 flex flex-col items-center">
+                        <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Stock</label>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => changeStock(product.id, -1)} className="p-1 rounded bg-gray-200 dark:bg-gray-700">
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={product.stock}
+                            onChange={(e) => setStock(product.id, e.target.value)}
+                            className="w-20 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                          />
+                          <button onClick={() => changeStock(product.id, 1)} className="p-1 rounded bg-gray-200 dark:bg-gray-700">
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Hide / Show toggle */}
+                      <div className="flex-shrink-0">
+                        <button
+                          onClick={() => toggleHidden(product.id)}
+                          className={`p-2 rounded-md transition ${
+                            product.hidden
+                              ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                              : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+                          }`}
+                          title={product.hidden ? "Show product" : "Hide product"}
+                        >
+                          {product.hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activePage === "orders" && (
+              <div className="p-6 rounded-xl bg-white dark:bg-gray-800 shadow">
+                <h2 className="text-xl font-bold mb-4">Orders</h2>
+                               <p className="text-gray-600 dark:text-gray-400">No orders yet.</p>
+                {/* Example Order Table */}
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full table-auto border-collapse border border-gray-200 dark:border-gray-700">
+                    <thead>
+                      <tr className="bg-gray-100 dark:bg-gray-700">
+                        <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm">Order ID</th>
+                        <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm">Customer</th>
+                        <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm">Items</th>
+                        <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm">Total</th>
+                        <th className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-left text-sm">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">#001</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">John Doe</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">Colageno x2, Panadol x1</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">$590.52</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-green-600 dark:text-green-400">Completed</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">#002</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">Jane Smith</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">Tylenol x1</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2">$196.84</td>
+                        <td className="border border-gray-200 dark:border-gray-600 px-4 py-2 text-yellow-600 dark:text-yellow-400">Pending</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}
+

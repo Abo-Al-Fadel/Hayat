@@ -1,0 +1,53 @@
+/* src/Pages/Home.css (or src/Home.css) */
+
+.bg-homepage {
+  min-height: 100vh;
+  background: radial-gradient(circle, #0066cc 0%, #003366 100%);
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 100%;
+  /* keep children contained */
+  overflow: hidden;
+}
+
+/* Nice safe quote class (use in your component: className="quote") */
+.quote {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: Georgia, "Times New Roman", serif; /* quote font */
+  font-style: italic;
+  color: rgba(255,255,255,0.85);
+  font-size: 1.25rem;            /* adjust as needed */
+  line-height: 1.05;
+  white-space: nowrap;           /* keep the quote line tidy */
+}
+
+/* Make sure big decorative elements can't cause scroll */
+.leaf {
+  pointer-events: none;
+  position: absolute;
+  user-select: none;
+  max-width: 220px;      /* prevents huge images that push layout */
+  opacity: .3;
+  transform-origin: center;
+}
+
+/* small helpers for leaves if you want variants */
+.leaf--left  { left: 1.5rem; top: 5rem; transform: rotate(-18deg); }
+.leaf--left2 { left: 4rem; top: 9.5rem; transform: rotate(-6deg); max-width:120px; opacity:.22;}
+.leaf--right { right: 3rem; top: 2.5rem; transform: rotate(8deg); max-width:100px; opacity:.25; }
+
+/* global reset (put in index.css if not already present) */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;  /* prevent horizontal scroll from stray absolute elements */
+}
+@font-face {
+  font-family: "Winslowtitle Boldnarrow";
+  src: url("../Fonts/fonnts.com-winslowtitle-boldnarrow.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+}
