@@ -27,6 +27,9 @@ public class OrderService : IOrderService
         };
 
         decimal total = 0;
+        
+        // Track medicines that may hit low stock threshold
+        var lowStockChecks = new List<(Medicine Medicine, int PreviousQty, int SoldQty)>();
 
         foreach (var item in dto.Items)
         {
@@ -36,7 +39,12 @@ public class OrderService : IOrderService
             if (medicine.Quantity < item.Quantity)
                 return (false, $"Not enough stock for {medicine.Name}", null!);
 
+            // Capture previous quantity BEFORE deduction for low stock detection
+            int previousQty = medicine.Quantity;
             medicine.Quantity -= item.Quantity;
+            
+            // Track for low stock alert (only check after successful order)
+            lowStockChecks.Add((medicine, previousQty, item.Quantity));
 
             order.Items.Add(new OrderItem
             {
@@ -53,8 +61,29 @@ public class OrderService : IOrderService
         _context.Orders.Add(order);
         await _context.SaveChangesAsync();
 
-        // Notify Admin about new order via SignalR
-        await _notificationService.NotifyOrderCreatedAsync(order);
+        // ═══════════════════════════════════════════════════════════════════════
+        // SignalR BROADCASTS - AFTER SaveChanges() completes (outside transaction)
+        // ═══════════════════════════════════════════════════════════════════════
+        
+        // 1. SILENT STOCK UPDATE - Admin sees updated stock immediately (NO notification)
+        foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
+        {
+            await _notificationService.NotifyMedicineStockUpdatedAsync(
+                medicine.Id, 
+                medicine.Name, 
+                medicine.Quantity, 
+                soldQty
+            );
+        }
+        
+        // 2. LOW STOCK ALERTS - Check each medicine for threshold crossing
+        // Only alerts when: previousQty > threshold AND newQty <= threshold
+        foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
+        {
+            await _notificationService.NotifyLowStockAlertAsync(medicine, previousQty, soldQty);
+        }
+        
+        // NOTE: NotifyOrderCreatedAsync is now a no-op - Admin doesn't receive sale notifications
 
         return (true, null, order);
     }

@@ -1,6 +1,8 @@
 // src/Components/dashboard/Sidebar.tsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { LogOut } from "lucide-react";
+import { useAuth } from "../../Context/AuthContext";
 import logo from "../../Images/HL.png";
 
 export interface NavItem {
@@ -18,9 +20,19 @@ interface SidebarProps {
 
 export function Sidebar({ title, items, activePage, onNavigate }: SidebarProps) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogoClick = () => {
     navigate("/");
+  };
+
+  const handleLogout = () => {
+    console.log("[Sidebar] Logout clicked");
+    // 1. Clear auth state and localStorage via AuthContext
+    logout();
+    // 2. Navigate to login AFTER auth is cleared
+    console.log("[Auth] redirecting to /login");
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -34,7 +46,7 @@ export function Sidebar({ title, items, activePage, onNavigate }: SidebarProps) 
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200">{title}</h2>
       </div>
 
-      <nav className="flex flex-col gap-3">
+      <nav className="flex flex-col gap-3 flex-1">
         {items.map((item) => (
           <button
             key={item.id}
@@ -50,6 +62,17 @@ export function Sidebar({ title, items, activePage, onNavigate }: SidebarProps) 
           </button>
         ))}
       </nav>
+
+      {/* Sign Out Button at Bottom */}
+      <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-gray-700"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </button>
+      </div>
     </aside>
   );
 }

@@ -14,6 +14,7 @@
  */
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { loginAPI } from "../Services/AuthService";
+import { stopAllSignalRConnections } from "../hooks/useSignalR";
 
 export type User = {
   id: string;
@@ -30,6 +31,7 @@ type AuthContextType = {
   isAuthenticated: boolean;
   loading: boolean;
   isLoggedIn: () => boolean;
+  isLoggingOut: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -42,6 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   // Anti-logout-loop protection
   const isLoggingOutRef = useRef(false);
@@ -125,30 +128,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   // Logout - clears localStorage (triggers logout in all tabs via storage event)
+  // ATOMIC: Sets flag → stops SignalR → clears state → clears storage → resets flag
   const logout = useCallback(() => {
+    // Prevent re-entry during logout
     if (isLoggingOutRef.current) {
       console.log("[Auth] Logout already in progress, blocking duplicate");
       return;
     }
+    
+    // Set flags FIRST
     isLoggingOutRef.current = true;
+    setIsLoggingOut(true);
     
-    console.log("[Logout] Token cleared, user redirected");
+    console.log("[Auth] ============================================");
+    console.log("[Auth] LOGOUT INITIATED");
     
-    // Clear state
+    // CRITICAL: Stop ALL SignalR connections BEFORE clearing auth
+    stopAllSignalRConnections();
+    console.log("[Auth] SignalR connections stopped");
+    
+    console.log("[Auth] token removed");
+    
+    // Clear React state SYNCHRONOUSLY
     setToken(null);
     setUser(null);
     
-    // Clear localStorage - this triggers storage event in other tabs
+    // Clear localStorage SYNCHRONOUSLY - triggers storage event in other tabs
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     
-    // Also clear any cached data
+    // Clear any cached data
     localStorage.removeItem("categories_cache");
     localStorage.removeItem("products");
     
+    console.log("[Auth] Storage cleared");
+    console.log("[Auth] ============================================");
+    
+    // Reset flag after a brief delay (to prevent rapid re-login issues)
     setTimeout(() => {
       isLoggingOutRef.current = false;
-    }, 1000);
+      setIsLoggingOut(false);
+    }, 500);
   }, []);
 
   // Computed auth state
@@ -165,7 +185,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logout, 
       isAuthenticated,
       loading,
-      isLoggedIn
+      isLoggedIn,
+      isLoggingOut
     }}>
       {children}
     </AuthContext.Provider>

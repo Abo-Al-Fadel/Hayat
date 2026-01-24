@@ -509,11 +509,26 @@ const PharmacistDashboard: React.FC = () => {
       console.log("[Pharmacist] ============================================");
       
       try {
-        // Support both camelCase and PascalCase from backend
-        const message = payload?.message ?? payload?.Message ?? payload?.name ?? `Update: ${payload?.action ?? "changed"}`;
-        const serverId = payload?.id ?? payload?.Id ?? null;
+        // DEFENSIVE CHECK: Pharmacist should NOT receive supply order notifications
+        // These are only for Admin and StorageManager
+        const payloadType = payload?.type?.toLowerCase();
         const action = payload?.action ?? payload?.Action ?? "changed";
-        const medicineName = payload?.medicineName ?? payload?.MedicineName ?? "";
+        
+        if (payloadType === "supplyorder" || action?.includes("supplyorder")) {
+          console.log("[Pharmacist] IGNORING supply order notification - not relevant to Pharmacist role");
+          return;
+        }
+        
+        // DEFENSIVE CHECK: Pharmacist should NOT receive stock logistics updates
+        // (StockUpdated events are handled separately and now only sent to Admin/StorageManager)
+        if (payloadType === "stock" && action === "stockupdated") {
+          console.log("[Pharmacist] IGNORING stock logistics notification - not relevant to Pharmacist role");
+          return;
+        }
+        
+        // Support both camelCase and PascalCase from backend
+        const message = payload?.message ?? payload?.Message ?? payload?.name ?? `Update: ${action}`;
+        const serverId = payload?.id ?? payload?.Id ?? null;
         
         const notif: NotificationItem = {
           id: `${action}-${serverId ?? ""}-${Date.now()}`,
@@ -543,9 +558,87 @@ const PharmacistDashboard: React.FC = () => {
       }
     };
 
+    // NOTE: StockUpdated event is NO LONGER sent to Pharmacist by backend
+    // Pharmacist only needs to see medicine availability, not supply logistics
+    // The onStockUpdated handler below is kept for backwards compatibility
+    // but backend now only sends StockUpdated to Admin and StorageManager
+    const onStockUpdated = (payload: any) => {
+      console.log("[Pharmacist] ============================================");
+      console.log("[Pharmacist] STOCK UPDATED EVENT RECEIVED (unexpected - backend should not send to Pharmacist)");
+      console.log("[Pharmacist] This may indicate a backend version mismatch");
+      console.log("[Pharmacist] ============================================");
+      console.log("[Pharmacist] Payload:", JSON.stringify(payload, null, 2));
+      console.log("[Pharmacist] ============================================");
+      
+      // Refresh products immediately to show new stock quantities
+      console.log("[Pharmacist] Refreshing products due to stock update...");
+      fetchProducts(selectedCategoryId, 1, false).catch(console.error);
+      
+      // Use backend-provided message with medicine names and quantities
+      // Example: "Stock updated: Paracetamol (+50 units)"
+      // Example: "Stock updated: 3 medicines added (Paracetamol, Ibuprofen, Aspirin) - Total: +150 units"
+      const message = payload?.message || `Stock updated: ${payload?.items?.length ?? 0} item(s) added`;
+      
+      // Show toast notification with clear medicine information
+      toast.success(message, { 
+        icon: "📦",
+        duration: 5000 
+      });
+      
+      // Also add to notification bell for persistence
+      const notif: NotificationItem = {
+        id: `stock-${payload?.supplyOrderId ?? ""}-${Date.now()}`,
+        message: message,
+        time: new Date(payload?.timestamp ?? Date.now()).toISOString(),
+        read: false,
+        serverId: null,
+      };
+      setNotifications(prev => [notif, ...prev]);
+    };
+
+    // NEW: InventoryStockIncreased handler - stock replenished by StorageManager
+    // This is the PRIMARY event for Pharmacist to know about inventory increases
+    const onInventoryStockIncreased = (payload: any) => {
+      // REQUIRED LOG FORMAT
+      console.log("[SignalR] InventoryStockIncreased received");
+      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
+      
+      // Update product stock in state directly (NOT refetch)
+      const items = payload?.items || [];
+      if (items.length > 0) {
+        setProducts(prev => prev.map(product => {
+          const updated = items.find((item: any) => item.medicineId === product.id);
+          if (updated) {
+            console.log(`[SignalR] Updating ${product.name} stock: ${product.quantity} → ${updated.newQuantity}`);
+            return { ...product, quantity: updated.newQuantity };
+          }
+          return product;
+        }));
+      }
+      
+      // Show ONE notification per medicine with required format
+      // "📦 Stock Updated: {medicineName} +{quantityAdded}"
+      items.forEach((item: any) => {
+        const message = `📦 Stock Updated: ${item.medicineName} +${item.addedQuantity}`;
+        toast.success(message, { duration: 5000 });
+        
+        // Add to notification bell for persistence
+        const notif: NotificationItem = {
+          id: `inventory-${item.medicineId}-${Date.now()}`,
+          message: message,
+          time: new Date(payload?.timestamp ?? Date.now()).toISOString(),
+          read: false,
+          serverId: null,
+        };
+        setNotifications(prev => [notif, ...prev]);
+      });
+    };
+
     // Register event handlers BEFORE starting connection
     conn.on("ReceiveNotification", onReceive);
     conn.on("ReceiveMedicineNotification", onReceive);
+    conn.on("StockUpdated", onStockUpdated);  // CRITICAL: Listen for stock updates
+    conn.on("InventoryStockIncreased", onInventoryStockIncreased);  // NEW: Stock replenished event
 
     conn.onreconnecting((err) => {
       console.log("[Pharmacist] SignalR reconnecting...", err);
@@ -594,6 +687,8 @@ const PharmacistDashboard: React.FC = () => {
     try {
       conn.off("ReceiveNotification");
       conn.off("ReceiveMedicineNotification");
+      conn.off("StockUpdated");  // CLEANUP: Remove StockUpdated listener
+      conn.off("InventoryStockIncreased");  // CLEANUP: Remove InventoryStockIncreased listener
       await conn.stop();
     } catch (err) {
       // ignore
@@ -1203,12 +1298,13 @@ const PharmacistDashboard: React.FC = () => {
       </div>
 
       {/* Main layout: ensure flex children can shrink so internal scrolling works */}
-      <div className="flex flex-1 min-h-0">
-        {/* Cart */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Cart - Fixed height with internal scroll, fits 7+ items before scrolling */}
+        {/* Raised position, rounded bottom-right corner only */}
         <aside
-          className={`w-80 p-4 flex flex-col h-full min-h-0 ${darkMode ? "bg-gray-900/60 border-gray-800" : "bg-white/80 border-gray-200"}`}
+          className={`w-80 p-4 flex flex-col max-h-[calc(90vh-45px)] rounded-br-2xl border-r ${darkMode ? "bg-gray-900/60 border-gray-800" : "bg-white/80 border-gray-200"}`}
         >
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-2">
             <h2 className="text-lg font-semibold">Cart</h2>
             {cart.length > 0 && (
               <button onClick={clearCart} className="text-red-400 hover:bg-red-900/40 px-2 py-1 rounded-full" title="Clear All Items">
@@ -1217,7 +1313,7 @@ const PharmacistDashboard: React.FC = () => {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+          <div className="flex-1 overflow-y-auto space-y-2 min-h-0 pr-2">
             {cart.map((item) => (
               <div 
                 key={item.id} 
@@ -1230,24 +1326,24 @@ const PharmacistDashboard: React.FC = () => {
                     src={buildImageUrl(item.image)} 
                     alt={item.name} 
                     loading="lazy"
-                    className="h-12 w-12 object-contain rounded"
+                    className="h-10 w-10 object-contain rounded"
                     onError={(e) => { (e.target as HTMLImageElement).src = DEFAULT_MEDICINE_IMAGE; }}
                   />
                   <div>
-                    <p className="font-medium text-sm">{item.name}</p>
-                    <p className="text-xs text-gray-400">Stock: {item.quantity}</p>
-                    <div className="flex items-center gap-2 text-xs mt-1">
-                      <button onClick={() => updateQuantity(item.id, item.cartQuantity - 1)} className={`px-2 py-1 rounded transition-colors duration-150 ${mode.plusMinus}`}>
-                        <Minus className="h-4 w-4" />
+                    <p className="font-medium text-sm leading-tight">{item.name}</p>
+                    <p className="text-xs text-gray-400 leading-tight">Stock: {item.quantity}</p>
+                    <div className="flex items-center gap-1 text-xs mt-0.5">
+                      <button onClick={() => updateQuantity(item.id, item.cartQuantity - 1)} className={`p-1 rounded transition-colors duration-150 ${mode.plusMinus}`}>
+                        <Minus className="h-3 w-3" />
                       </button>
                       <input
                         type="number"
                         value={item.cartQuantity}
                         onChange={(e) => updateQuantity(item.id, parseInt(e.target.value || "0", 10) || 0)}
-                        className={`w-12 rounded text-center text-sm ${mode.qtyInput}`}
+                        className={`w-10 rounded text-center text-xs ${mode.qtyInput}`}
                       />
-                      <button onClick={() => updateQuantity(item.id, item.cartQuantity + 1)} className={`px-2 py-1 rounded transition-colors duration-150 ${mode.plusMinus}`}>
-                        <Plus className="h-4 w-4" />
+                      <button onClick={() => updateQuantity(item.id, item.cartQuantity + 1)} className={`p-1 rounded transition-colors duration-150 ${mode.plusMinus}`}>
+                        <Plus className="h-3 w-3" />
                       </button>
                     </div>
                   </div>
@@ -1261,7 +1357,7 @@ const PharmacistDashboard: React.FC = () => {
             ))}
           </div>
 
-          <div className="border-t pt-4">
+          <div className="border-t pt-3 mt-auto flex-shrink-0">
             <p className="font-semibold flex justify-between text-sm">
               <span>Total</span>
               <span className="text-purple-600">${total.toFixed(2)}</span>
@@ -1269,7 +1365,7 @@ const PharmacistDashboard: React.FC = () => {
             <button 
               onClick={handleCheckout} 
               disabled={checkoutLoading} 
-              className={`w-full mt-4 bg-purple-600 text-white py-2 rounded-lg shadow-md shadow-purple-500/30 transition-colors ${
+              className={`w-full mt-3 bg-purple-600 text-white py-2 rounded-lg shadow-md shadow-purple-500/30 transition-colors ${
                 checkoutLoading ? "opacity-70 cursor-wait" : "hover:bg-purple-700"
               }`}
             >

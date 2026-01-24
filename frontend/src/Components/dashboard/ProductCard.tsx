@@ -190,11 +190,14 @@ export function ProductCard({
 
         <button
           onClick={() => onDelete(product.id, product.name)}
-          className={`p-2 rounded-md hover:bg-red-100 ${
-            darkMode ? "bg-transparent" : "bg-red-50"
+          className={`p-2 rounded-md transition-colors ${
+            darkMode 
+              ? "bg-transparent hover:bg-red-900/20 hover:text-red-400" 
+              : "bg-red-50 hover:bg-red-100"
           }`}
+          title="Delete product"
         >
-          <Trash2 className={`h-4 w-4 ${darkMode ? "text-red-300" : "text-red-600"}`} />
+          <Trash2 className={`h-4 w-4 ${darkMode ? "text-red-400" : "text-red-600"}`} />
         </button>
       </div>
     </div>

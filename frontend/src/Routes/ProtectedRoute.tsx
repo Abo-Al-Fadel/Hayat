@@ -48,7 +48,7 @@ const getUserFromStorage = (): { role: string } | null => {
 };
 
 const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, isLoggingOut } = useAuth();
   const location = useLocation();
   
   // SYNCHRONOUS CHECK - Read directly from localStorage
@@ -58,6 +58,13 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   
   // Use context user if available, otherwise fall back to localStorage
   const effectiveUser = user || storageUser;
+  
+  // During logout, immediately redirect to prevent white screen
+  // This catches the case where logout was triggered but navigate hasn't happened yet
+  if (isLoggingOut) {
+    console.log("[ProtectedRoute] Logout in progress - redirecting to /login");
+    return <Navigate to="/login" replace />;
+  }
   
   // Show spinner ONLY during AuthContext initial loading
   // AND only if we have a token (meaning user might be valid)

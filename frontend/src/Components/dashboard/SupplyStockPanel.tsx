@@ -31,8 +31,8 @@
  */
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { 
-  Package, Plus, Search, ChevronRight, Check, X, Clock, 
-  Truck as TruckIcon, Edit2, Trash2, Calendar, AlertCircle,
+  Package, Plus, Search, ChevronRight, X,
+  Edit2, Trash2, Calendar, AlertCircle,
   ChevronLeft, ChevronDown, DollarSign
 } from "lucide-react";
 import {
@@ -106,6 +106,7 @@ interface SupplyStockPanelProps {
   darkMode: boolean;
   onCreateSupplyStock: (data: CreateSupplyStockDto) => Promise<void>;
   onUpdateStatus: (id: number, status: SupplyStockStatus) => Promise<void>;
+  onDeleteSupplyStock?: (id: number) => Promise<void>; // Delete supply stock (Admin only)
   onRefresh?: () => void; // Optional refresh callback after edit
 }
 
@@ -120,6 +121,7 @@ export function SupplyStockPanel({
   darkMode,
   onCreateSupplyStock,
   onUpdateStatus,
+  onDeleteSupplyStock,
   onRefresh,
 }: SupplyStockPanelProps) {
   // ─────────────────────────────────────────────────────────────────────────
@@ -175,6 +177,10 @@ export function SupplyStockPanel({
   // Cancel confirmation modal state
   const [stockToCancel, setStockToCancel] = useState<SupplyStock | null>(null);
   const [cancelConfirming, setCancelConfirming] = useState(false);
+
+  // Delete confirmation modal state
+  const [stockToDelete, setStockToDelete] = useState<SupplyStock | null>(null);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Calculated Values
@@ -550,6 +556,26 @@ export function SupplyStockPanel({
     }
   }, [stockToCancel, onUpdateStatus]);
 
+  /**
+   * Confirm and execute deletion (Admin only, Stored/Cancelled orders)
+   */
+  const confirmDeleteOrder = useCallback(async () => {
+    if (!stockToDelete || !onDeleteSupplyStock) return;
+    
+    setDeleteConfirming(true);
+    try {
+      await onDeleteSupplyStock(stockToDelete.id);
+      toast.success(`Supply order #${stockToDelete.id} deleted`);
+      setStockToDelete(null);
+      onRefresh?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete order";
+      toast.error(message);
+    } finally {
+      setDeleteConfirming(false);
+    }
+  }, [stockToDelete, onDeleteSupplyStock, onRefresh]);
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render Helpers
   // ─────────────────────────────────────────────────────────────────────────
@@ -679,6 +705,18 @@ export function SupplyStockPanel({
             Cancel
           </button>
         )}
+
+        {/* Delete button - Admin can delete Stored or Cancelled orders */}
+        {onDeleteSupplyStock && (status === SupplyStockStatus.Stored || status === SupplyStockStatus.Cancelled) && (
+          <button
+            onClick={() => setStockToDelete(stock)}
+            disabled={isLoading}
+            title="Delete order permanently"
+            className="p-1.5 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
     );
   };
@@ -728,7 +766,7 @@ export function SupplyStockPanel({
             placeholder="Search by supplier, medicine, or status..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full pl-9 pr-4 py-2 text-sm rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+            className={`w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
               darkMode 
                 ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" 
                 : "bg-white border-gray-300 text-gray-900 placeholder-gray-500"
@@ -1420,6 +1458,104 @@ export function SupplyStockPanel({
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
               >
                 {cancelConfirming ? "Cancelling..." : "Confirm Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {stockToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className={`w-full max-w-md rounded-xl shadow-xl ${
+            darkMode ? "bg-gray-800" : "bg-white"
+          }`}>
+            {/* Modal Header */}
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/30">
+                  <Trash2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <h3 className="text-lg font-semibold">Delete Supply Order</h3>
+              </div>
+              <button
+                onClick={() => setStockToDelete(null)}
+                className={`p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 space-y-4">
+              {/* Order Details */}
+              <div>
+                <p className={`text-sm mb-3 ${darkMode ? "text-gray-300" : "text-gray-600"}`}>
+                  Are you sure you want to permanently delete this supply order?
+                </p>
+                <div className={`rounded-lg p-4 ${darkMode ? "bg-gray-700" : "bg-gray-100"}`}>
+                  <div className="flex justify-between mb-1">
+                    <span>Order #:</span>
+                    <span className="font-medium">{stockToDelete.id}</span>
+                  </div>
+                  <div className="flex justify-between mb-1">
+                    <span>Supplier:</span>
+                    <span className="font-medium">{stockToDelete.supplierName}</span>
+                  </div>
+                  <div className="flex justify-between mb-1">
+                    <span>Status:</span>
+                    <span className="font-medium">{stockToDelete.status}</span>
+                  </div>
+                  <div className="flex justify-between mb-1">
+                    <span>Items:</span>
+                    <span className="font-medium">{stockToDelete.items?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">
+                      ${(stockToDelete.items?.reduce((sum, item) => sum + ((item.unitPrice || 0) * item.quantity), 0) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Warning Message */}
+              <div className={`p-3 rounded-lg border ${
+                darkMode 
+                  ? "bg-red-900/20 border-red-800 text-red-300" 
+                  : "bg-red-50 border-red-200 text-red-700"
+              }`}>
+                <p className="text-sm font-medium mb-1">⚠️ This action is permanent</p>
+                <p className="text-xs opacity-90">
+                  This order will be permanently deleted from the database.
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className={`px-6 py-4 border-t flex gap-3 justify-end ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <button
+                onClick={() => setStockToDelete(null)}
+                disabled={deleteConfirming}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  darkMode 
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-200" 
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-800"
+                }`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteOrder}
+                disabled={deleteConfirming}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {deleteConfirming ? "Deleting..." : "Delete Order"}
               </button>
             </div>
           </div>

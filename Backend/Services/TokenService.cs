@@ -28,12 +28,12 @@ namespace Backend.Services
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             };
 
-            // Add role claims (both ClaimTypes.Role and "role") to maximize compatibility
+            // Add role claims - use ONLY ClaimTypes.Role (standard)
+            // The "role" claim is handled by ASP.NET Core middleware automatically
             foreach (var role in roles)
             {
                 if (string.IsNullOrWhiteSpace(role)) continue;
                 claims.Add(new Claim(ClaimTypes.Role, role));
-                claims.Add(new Claim("role", role));
             }
 
             var keyString = _config["JwtSettings:Key"];

@@ -5,6 +5,7 @@ import Home from "../Pages/Home";
 import Login from "../Pages/Login";
 import AdminDashboard from "../Pages/AdminDashboard";
 import PharmacistDashboard from "../Pages/PharmacistDashboard";
+import StorageManagerDashboard from "../Pages/StorageManagerDashboard";
 import ProtectedRoute from "./ProtectedRoute";
 
 export const router = createBrowserRouter([
@@ -35,15 +36,15 @@ export const router = createBrowserRouter([
         ),
       },
 
-      // Optional: Storage Manager Dashboard
-      // {
-      //   path: "storage",
-      //   element: (
-      //     <ProtectedRoute allowedRoles={["StorageManager"]}>
-      //       <StorageManagerDashboard />
-      //     </ProtectedRoute>
-      //   ),
-      // },
+      // Storage Manager Dashboard
+      {
+        path: "storage", // /storage
+        element: (
+          <ProtectedRoute allowedRoles={["StorageManager"]}>
+            <StorageManagerDashboard />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
 ]);

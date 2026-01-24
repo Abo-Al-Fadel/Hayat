@@ -4,7 +4,7 @@ import hayaa from "../Images/HTL.png";
 import "./Home.css";
 import leaf from "../Images/leaf.png";
 import { FaSignOutAlt, FaUserCircle as FaUserCircleRaw } from "react-icons/fa";
-import { redirect, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 
 export const FaUserCircle = (props: React.SVGProps<SVGSVGElement>) => FaUserCircleRaw(props);
@@ -22,10 +22,12 @@ const Home = (props: Props) => {
       return;
     }
 
-    // Navigate based on role
-    if (user.role === "admin") navigate("/admin");
-    else if (user.role === "pharmacist") navigate("/pharmacist");
-    else navigate("/"); // fallback
+    // Navigate based on role (case-insensitive comparison)
+    const role = user.role?.toLowerCase();
+    if (role === "admin") navigate("/admin");
+    else if (role === "pharmacist") navigate("/pharmacist");
+    else if (role === "storagemanager") navigate("/storage");
+    else navigate("/"); // fallback for unknown roles
   };
 
   const handleProducts = () => {

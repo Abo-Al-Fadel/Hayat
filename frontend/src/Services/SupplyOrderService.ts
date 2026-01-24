@@ -120,6 +120,43 @@ export const canAdminPerformAction = (status: SupplyStockStatus, action: "approv
 };
 
 /**
+ * Check if Storage Manager can change to a specific status
+ * Storage Manager can only: mark as Shipped, Received, or Stored
+ * Status can only progress forward, never backward
+ */
+export const canStorageManagerChangeStatus = (currentStatus: SupplyStockStatus, targetStatus: SupplyStockStatus): boolean => {
+  // Define valid transitions for Storage Manager
+  const validTransitions: Record<SupplyStockStatus, SupplyStockStatus[]> = {
+    [SupplyStockStatus.Created]: [],        // Storage Manager cannot see Created
+    [SupplyStockStatus.Approved]: [],       // Storage Manager cannot see Approved
+    [SupplyStockStatus.Ordered]: [SupplyStockStatus.Shipped],
+    [SupplyStockStatus.Shipped]: [SupplyStockStatus.Received],
+    [SupplyStockStatus.Received]: [SupplyStockStatus.Stored],
+    [SupplyStockStatus.Stored]: [],         // Final state
+    [SupplyStockStatus.Cancelled]: [],      // Final state
+  };
+  
+  return validTransitions[currentStatus]?.includes(targetStatus) ?? false;
+};
+
+/**
+ * Get available next statuses for Storage Manager
+ * Returns array of statuses that can be selected from current status
+ */
+export const getStorageManagerAvailableStatuses = (currentStatus: SupplyStockStatus): SupplyStockStatus[] => {
+  switch (currentStatus) {
+    case SupplyStockStatus.Ordered:
+      return [SupplyStockStatus.Shipped];
+    case SupplyStockStatus.Shipped:
+      return [SupplyStockStatus.Received];
+    case SupplyStockStatus.Received:
+      return [SupplyStockStatus.Stored];
+    default:
+      return [];
+  }
+};
+
+/**
  * Check if we can advance to the next status
  */
 export const getNextStatus = (current: SupplyStockStatus): SupplyStockStatus | null => {
@@ -141,7 +178,7 @@ export const getNextStatus = (current: SupplyStockStatus): SupplyStockStatus | n
 
 /**
  * Supply Order Item from backend (SupplyOrderItemDto)
- * Backend returns: medicineId, medicineName, quantity, unitPrice
+ * Backend returns: medicineId, medicineName, quantity, unitPrice, medicineImageUrl
  * All fields are required - no optional flags to mask missing data
  */
 export interface SupplyStockItem {
@@ -149,6 +186,7 @@ export interface SupplyStockItem {
   medicineName: string;  // From backend: item.Medicine.Name
   quantity: number;      // From backend: item.Quantity  
   unitPrice: number;     // From backend: item.UnitPrice (BUY price)
+  medicineImageUrl?: string | null;  // From backend: item.Medicine.Image (for Storage Manager visual ID)
 }
 
 export interface SupplyStock {
@@ -256,6 +294,20 @@ export const getSupplyStocks = async (): Promise<SupplyStock[]> => {
 };
 
 /**
+ * GET supply stocks for Storage Manager (Ordered, Shipped, Received only)
+ * These are orders that require Storage Manager action
+ */
+export const getSupplyStocksForStorageManager = async (): Promise<SupplyStock[]> => {
+  const response = await api.get("/api/SupplyOrder/storage-manager");
+  
+  if (process.env.NODE_ENV === 'development') {
+    console.log("[SupplyOrderService] Fetched storage manager orders:", response.data?.length || 0);
+  }
+  
+  return response.data.map(normalizeSupplyStock);
+};
+
+/**
  * GET all supply stocks (including historical)
  * Use sparingly - may be slow with large datasets
  */
@@ -317,6 +369,13 @@ export const markSupplyStockShipped = (id: number) => updateSupplyStockStatus(id
 export const markSupplyStockReceived = (id: number) => updateSupplyStockStatus(id, SupplyStockStatus.Received);
 export const markSupplyStockStored = (id: number) => updateSupplyStockStatus(id, SupplyStockStatus.Stored);
 
+/**
+ * DELETE supply order (Admin only, only Stored or Cancelled orders)
+ */
+export const deleteSupplyStock = async (id: number): Promise<void> => {
+  await api.delete(`/api/SupplyOrder/${id}`);
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data Normalization
 // ─────────────────────────────────────────────────────────────────────────────
@@ -349,7 +408,7 @@ function normalizeSupplyStock(data: any): SupplyStock {
     storedAt: data.storedAt || null,
     cancelledAt: data.cancelledAt || null,
     // CRITICAL: Map items directly from backend response
-    // Backend SupplyOrderItemDto has: medicineId, medicineName, quantity, unitPrice
+    // Backend SupplyOrderItemDto has: medicineId, medicineName, quantity, unitPrice, medicineImageUrl
     items: Array.isArray(data.items) 
       ? data.items.map((item: any) => ({
           medicineId: item.medicineId,
@@ -359,6 +418,8 @@ function normalizeSupplyStock(data: any): SupplyStock {
           quantity: item.quantity,
           // unitPrice (BUY price) from backend: item.UnitPrice
           unitPrice: item.unitPrice,
+          // medicineImageUrl from backend: item.Medicine.Image
+          medicineImageUrl: item.medicineImageUrl || null,
         }))
       : [],
     totalAmount: data.totalAmount,

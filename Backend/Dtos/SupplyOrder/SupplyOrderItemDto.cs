@@ -18,4 +18,9 @@ public class SupplyOrderItemDto
     /// Unit price (BUY/COST price) - what pharmacy paid to supplier
     /// </summary>
     public decimal UnitPrice { get; set; }
+    
+    /// <summary>
+    /// Medicine image URL for visual identification in Storage Manager dashboard
+    /// </summary>
+    public string? MedicineImageUrl { get; set; }
 }

@@ -7,6 +7,7 @@
  * - Orders viewing
  * - Supply stocks management
  * - Users management
+ * - Real-time notifications from Storage Manager
  * 
  * Section Persistence:
  * - Uses localStorage to persist active section across page reloads
@@ -16,10 +17,14 @@
  * Low Stock Logic:
  * - Products with stock < 30 are considered "low stock"
  * - Displayed only in Products section (removed from other areas)
+ * 
+ * Real-time Sync:
+ * - SignalR receives SupplyOrderStatusChanged when StorageManager updates status
+ * - Notification bell shows unread notifications
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle } from "lucide-react";
+import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle, Bell } from "lucide-react";
 import toast from "react-hot-toast";
 
 // Hooks
@@ -47,7 +52,13 @@ import {
 } from "../Components/dashboard";
 
 // Services
-import { buildMedicineChangePayload } from "../Services/NotificationService";
+import { 
+  buildMedicineChangePayload,
+  getNotifications,
+  markNotificationsRead,
+  markAllNotificationsRead,
+  type Notification,
+} from "../Services/NotificationService";
 import { getUsers, createUser, deleteUser, updateUserRole, type User, type CreateUserDto } from "../Services/UserService";
 import { getSuppliers, createSupplier, deleteSupplier, type Supplier } from "../Services/SupplierService";
 import { 
@@ -173,6 +184,28 @@ export default function AdminDashboard() {
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null); // userId being updated
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Current Admin ID - extracted from JWT for self-protection
+  // Admin cannot delete or demote themselves
+  // ──────────────────────────────────────────────────────────────────────────
+  const currentAdminId = useMemo<string | null>(() => {
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (!token) return null;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.nameid || payload.sub || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Notification State (for Supply Order updates from Storage Manager)
+  // ──────────────────────────────────────────────────────────────────────────
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Stocks State
   // ──────────────────────────────────────────────────────────────────────────
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -198,7 +231,7 @@ export default function AdminDashboard() {
   } = useProducts();
 
   // Categories - includes CRUD operations
-  const { categories, addCategory, editCategory, removeCategory, reload: reloadCategories } = useCategories();
+  const { categories, addCategory, editCategory, removeCategory } = useCategories();
 
   // Orders - must be before SignalR so reloadOrders is available
   const {
@@ -209,32 +242,135 @@ export default function AdminDashboard() {
     fetchOrders,
     fetchOrderDetail,
     closeOrderDetail,
-    reload: reloadOrders,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    reload: reloadOrders, // kept for manual refresh capability, not used by SignalR
   } = useOrders();
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Notification fetching
+  // ──────────────────────────────────────────────────────────────────────────
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const data = await getNotifications("Admin", false);
+      setNotifications(data);
+      const unread = data.filter(n => !n.isRead).length;
+      setUnreadCount(unread);
+    } catch (err) {
+      console.error("[Admin] Failed to fetch notifications:", err);
+    }
+  }, []);
+
   // SignalR - handlers for receiving notifications from other roles
-  // Admin receives notifications when Pharmacists make changes (if applicable)
+  // Admin receives notifications when:
+  // - Storage Manager changes supply order status
+  // - LOW STOCK ALERTS when medicine drops below threshold after sale
+  // - SILENT STOCK UPDATES when Pharmacist sells (no notification, just state update)
   const signalRHandlers = useMemo(() => ({
     // Listen for the correct event name from backend
+    // FIX: Backend now sends ONLY ReceiveNotification (no duplicates)
     ReceiveNotification: (payload: any) => {
-      console.log("[Admin] Notification received:", payload);
-      // Reload products when notified of changes
-      reloadProducts();
-      // Also reload orders in case it's an order notification
-      if (payload?.action === "ordercreated" || payload?.type === "order") {
-        reloadOrders();
+      console.log("[SignalR] event received: ReceiveNotification", payload);
+      
+      // REMOVED: Order notifications - Admin no longer receives sale notifications
+      // Backend now suppresses these entirely
+      
+      // Handle supply order status changes from StorageManager
+      if (payload?.type === "supplyorder") {
+        // Refresh supply stocks list
+        getSupplyStocks().then(data => setSupplyStocks(data)).catch(console.error);
+        // Refresh notifications
+        fetchNotifications();
+        // Show toast for status change
+        toast.success(payload.message || "Supply order updated", { icon: "📦" });
       }
+      
+      // NOTE: Low stock alerts are handled ONLY by the dedicated LowStockAlert handler
+      // Do NOT handle them here to prevent duplicates
+      
+      console.log("[Realtime] UI updated from event");
     },
-    // Order created - reload orders list
-    OrderCreated: () => {
-      console.log("[Admin] OrderCreated received - reloading orders");
-      reloadOrders();
+    
+    // ═══════════════════════════════════════════════════════════════════════
+    // MEDICINE STOCK UPDATED - SILENT data sync (NO toast, NO notification)
+    // This is the dedicated event for real-time stock updates from Pharmacist sales
+    // ═══════════════════════════════════════════════════════════════════════
+    MedicineStockUpdated: (payload: any) => {
+      console.log("[SignalR] ============================================");
+      console.log("[SignalR] MedicineStockUpdated received (SILENT)");
+      console.log("[SignalR] Medicine ID:", payload?.medicineId);
+      console.log("[SignalR] New Stock:", payload?.newStock);
+      console.log("[SignalR] Changed By:", payload?.changedBy);
+      console.log("[SignalR] ============================================");
+      
+      // Update product stock in state SILENTLY - no toast, no notification
+      if (payload?.medicineId && typeof payload?.newStock === "number") {
+        updateLocalProduct(payload.medicineId, { stock: payload.newStock });
+        console.log("[SignalR] Stock updated silently for medicine", payload.medicineId);
+      }
+      
+      // NO toast - this is intentionally silent
+      // NO fetchNotifications - this is not a notification
     },
-    // Legacy event names for backwards compatibility
-    MedicineCreated: () => reloadProducts(),
-    MedicineUpdated: () => reloadProducts(),
-    MedicineDeleted: () => reloadProducts(),
-  }), [reloadProducts, reloadOrders]);
+    
+    // Dedicated LOW STOCK ALERT event handler
+    // This fires ONLY when stock crosses below threshold (e.g., 31→30)
+    LowStockAlert: (payload: any) => {
+      console.log("[SignalR] ============================================");
+      console.log("[SignalR] LowStockAlert sent ONCE");
+      console.log("[SignalR] Medicine:", payload?.medicineName);
+      console.log("[SignalR] Current Qty:", payload?.currentQuantity);
+      console.log("[SignalR] ============================================");
+      
+      // Note: Stock already updated via MedicineStockUpdated event
+      // Refresh notifications for bell count
+      fetchNotifications();
+      
+      // Show prominent warning toast (message already formatted by backend)
+      const message = payload?.message || `⚠️ Low Stock: ${payload?.medicineName} is now at ${payload?.currentQuantity} units`;
+      toast(message, {
+        icon: "⚠️",
+        duration: 8000,
+        style: {
+          background: "#FEF3C7",
+          color: "#92400E",
+          border: "1px solid #F59E0B",
+        },
+      });
+    },
+    
+    // INVENTORY UPDATE EVENT - Fired when stock is "Stored" (supply order)
+    // This updates product quantities on Admin dashboard
+    StockUpdated: (payload: any) => {
+      console.log("[SignalR] ============================================");
+      console.log("[SignalR] event received: StockUpdated");
+      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
+      console.log("[SignalR] ============================================");
+      
+      // Refresh products to show updated stock quantities
+      reloadProducts();
+      // Also refresh supply stocks list
+      getSupplyStocks().then(data => setSupplyStocks(data)).catch(console.error);
+      
+      // Use backend-provided message with medicine names and quantities
+      const message = payload?.message || `Stock updated: ${payload?.items?.length ?? 0} item(s) added`;
+      toast.success(message, { icon: "📦" });
+      console.log("[Realtime] UI updated from event");
+    },
+    
+    // Legacy event names for backwards compatibility (no longer sent by backend)
+    MedicineCreated: () => {
+      console.log("[SignalR] event received: MedicineCreated");
+      reloadProducts();
+    },
+    MedicineUpdated: () => {
+      console.log("[SignalR] event received: MedicineUpdated");
+      reloadProducts();
+    },
+    MedicineDeleted: () => {
+      console.log("[SignalR] event received: MedicineDeleted");
+      reloadProducts();
+    },
+  }), [reloadProducts, fetchNotifications, updateLocalProduct]);
   
   const { invoke } = useSignalR("/hubs/notifications", signalRHandlers);
 
@@ -268,7 +404,43 @@ export default function AdminDashboard() {
     }
     
     console.log("[Admin] Dashboard mounted with valid token");
-  }, [navigate]);
+    
+    // Fetch notifications on mount
+    fetchNotifications();
+  }, [navigate, fetchNotifications]);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Notification Handlers
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleMarkNotificationRead = useCallback(async (id: number) => {
+    try {
+      await markNotificationsRead([id]);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error("Failed to mark notification as read:", err);
+    }
+  }, []);
+
+  const handleMarkAllRead = useCallback(async () => {
+    try {
+      await markAllNotificationsRead("Admin");
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      toast.error("Failed to mark all as read");
+    }
+  }, []);
+
+  const handleNotificationClick = useCallback((notification: Notification) => {
+    handleMarkNotificationRead(notification.id);
+    
+    // Navigate to stocks section if supply order notification
+    if (notification.supplyOrderId) {
+      setActivePage("stocks");
+      setShowNotifications(false);
+    }
+  }, [handleMarkNotificationRead]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Fetch Users when users page is active
@@ -638,25 +810,29 @@ export default function AdminDashboard() {
    * 
    * When status becomes "Stored":
    * - Backend adds quantities to main inventory (Medicine.Quantity)
-   * - Item is removed from active list (handled by getSupplyStocks/active endpoint)
    * - We refresh the product list to reflect updated stock
+   * - Stored items remain visible so Admin can delete them manually
    */
   const handleUpdateSupplyStockStatus = useCallback(async (id: number, status: SupplyStockStatus) => {
     const updated = await updateSupplyStockStatus(id, status);
     
-    // If status changed to Stored or Cancelled, remove from list
-    // (backend /active endpoint excludes these, but we can do it locally too)
-    if (status === SupplyStockStatus.Stored || status === SupplyStockStatus.Cancelled) {
-      setSupplyStocks((prev) => prev.filter((s) => s.id !== id));
-      
-      // If stored, refresh products to show updated stock
-      if (status === SupplyStockStatus.Stored) {
-        reloadProducts();
-      }
-    } else {
-      setSupplyStocks((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    // Update the item in the list (keep it visible even if Stored/Cancelled)
+    setSupplyStocks((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    
+    // If stored, refresh products to show updated stock
+    if (status === SupplyStockStatus.Stored) {
+      reloadProducts();
     }
   }, [reloadProducts]);
+
+  /**
+   * Delete a supply stock order (Admin only, Stored/Cancelled only)
+   */
+  const handleDeleteSupplyStock = useCallback(async (id: number) => {
+    const { deleteSupplyStock } = await import("../Services/SupplyOrderService");
+    await deleteSupplyStock(id);
+    setSupplyStocks((prev) => prev.filter((s) => s.id !== id));
+  }, []);
 
   /**
    * Refresh supply stocks data (called after editing)
@@ -930,7 +1106,74 @@ export default function AdminDashboard() {
               )}
             </div>
           )}
+          
+          {/* Notification Bell - Appears on all pages */}
+          <div className="relative ml-2">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+            >
+              <Bell className={`h-5 w-5 ${darkMode ? "text-gray-300" : "text-gray-600"}`} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center text-xs font-bold text-white bg-red-500 rounded-full">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotifications && (
+              <div className={`absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto rounded-lg shadow-xl border z-50 ${
+                darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+              }`}>
+                <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                  <h3 className="font-semibold">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-xs text-purple-600 hover:text-purple-700"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                
+                {notifications.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">
+                    No notifications
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {notifications.slice(0, 10).map(notif => (
+                      <div
+                        key={notif.id}
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`p-3 cursor-pointer transition ${
+                          notif.isRead 
+                            ? (darkMode ? "bg-gray-800" : "bg-white") 
+                            : (darkMode ? "bg-gray-700" : "bg-purple-50")
+                        } ${darkMode ? "hover:bg-gray-700" : "hover:bg-gray-50"}`}
+                      >
+                        <p className="text-sm">{notif.message}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(notif.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </DashboardHeader>
+
+        {/* Click outside to close notifications */}
+        {showNotifications && (
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setShowNotifications(false)}
+          />
+        )}
 
         <main className="flex-1 overflow-y-auto p-6">
           {/* ─── Products Page ─────────────────────────────────────────────── */}
@@ -1043,7 +1286,7 @@ export default function AdminDashboard() {
                               className={`p-1 rounded transition-colors ${
                                 productCount > 0
                                   ? "text-gray-400 cursor-not-allowed"
-                                  : "text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30"
+                                  : "text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                               }`}
                               title={productCount > 0 ? `Cannot delete - ${productCount} products use this category` : "Delete category"}
                               disabled={productCount > 0}
@@ -1107,7 +1350,7 @@ export default function AdminDashboard() {
                   placeholder="Search orders by ID or total..."
                   value={ordersSearchTerm}
                   onChange={(e) => setOrdersSearchTerm(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
 
@@ -1162,6 +1405,7 @@ export default function AdminDashboard() {
                     darkMode={darkMode}
                     onCreateSupplyStock={handleCreateSupplyStock}
                     onUpdateStatus={handleUpdateSupplyStockStatus}
+                    onDeleteSupplyStock={handleDeleteSupplyStock}
                     onRefresh={handleRefreshSupplyStocks}
                   />
                 </div>
@@ -1268,7 +1512,7 @@ export default function AdminDashboard() {
                     placeholder="Search by username, email, or role..."
                     value={usersSearchTerm}
                     onChange={(e) => setUsersSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   />
                 </div>
 
@@ -1317,12 +1561,16 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-3">
                           {/* Role Dropdown - DISTINCT colors: Admin=Red, Pharmacist=Cyan, StorageManager=Orange */}
+                          {/* DISABLED for current admin (self-protection) */}
                           <select
                             value={user.role}
                             onChange={(e) => handleRoleChange(user, e.target.value)}
-                            disabled={roleUpdating === user.id}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border cursor-pointer transition-all focus:ring-2 focus:ring-offset-1 ${
+                            disabled={roleUpdating === user.id || user.id === currentAdminId}
+                            title={user.id === currentAdminId ? "You cannot change your own role" : undefined}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all focus:ring-2 focus:ring-offset-1 ${
                               roleUpdating === user.id ? "opacity-50 cursor-wait" : ""
+                            } ${
+                              user.id === currentAdminId ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                             } ${
                               user.role.toLowerCase() === "admin" 
                                 ? "bg-red-50 text-red-800 border-red-300 dark:bg-gray-700 dark:text-red-300 dark:border-red-500/50 focus:ring-red-500"
@@ -1336,13 +1584,23 @@ export default function AdminDashboard() {
                             <option value="StorageManager">Storage Manager</option>
                           </select>
                           {/* Delete Button - opens custom modal */}
+                          {/* DISABLED for current admin (self-protection) */}
                           <button
                             onClick={() => openDeleteUserModal(user)}
-                            className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                            title="Delete user"
+                            disabled={user.id === currentAdminId}
+                            title={user.id === currentAdminId ? "You cannot delete your own account" : "Delete user"}
+                            className={`p-2 rounded-lg transition-colors ${
+                              user.id === currentAdminId 
+                                ? "text-gray-400 cursor-not-allowed opacity-50" 
+                                : "text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                            }`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                          {/* Self indicator for clarity */}
+                          {user.id === currentAdminId && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400 italic">(You)</span>
+                          )}
                         </div>
                       </div>
                     ))

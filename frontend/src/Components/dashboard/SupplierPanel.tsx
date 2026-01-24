@@ -136,7 +136,7 @@ export function SupplierPanel({
               placeholder="Search by name, email, or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-9 pr-4 py-2 text-sm rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+              className={`w-full pl-9 pr-4 py-2.5 text-sm rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
                 darkMode 
                   ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400" 
                   : "bg-white border-gray-300 text-gray-900 placeholder-gray-500"

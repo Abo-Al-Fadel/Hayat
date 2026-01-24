@@ -43,16 +43,16 @@ export function DashboardHeader({
         {title}
       </h1>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-1 justify-end">
         {showSearch && onSearchChange && (
-          <div className="relative">
+          <div className="relative flex-1 max-w-md">
             <input
               value={searchValue}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
-              className="w-72 rounded-full px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-100"
+              className="w-full rounded-full px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-100"
             />
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 dark:text-gray-300" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-300" />
           </div>
         )}
 

@@ -82,6 +82,18 @@ public class SupplyOrderController : ControllerBase
     }
 
     /// <summary>
+    /// Get orders for Storage Manager (Ordered, Shipped, Received only)
+    /// This endpoint returns orders that require Storage Manager action
+    /// </summary>
+    [HttpGet("storage-manager")]
+    [Authorize(Roles = "StorageManager")]
+    public async Task<IActionResult> GetForStorageManager()
+    {
+        var orders = await _service.GetOrdersForStorageManagerAsync();
+        return Ok(orders);
+    }
+
+    /// <summary>
     /// Update supply order status (PATCH - partial update)
     /// 
     /// Status Transitions:
@@ -90,6 +102,7 @@ public class SupplyOrderController : ControllerBase
     /// - Cancel allowed before Shipped (Admin)
     /// 
     /// When status becomes "Stored", inventory is automatically updated.
+    /// Real-time notifications are sent to the other role (Admin ↔ StorageManager)
     /// </summary>
     [HttpPatch("{id}/status")]
     [Authorize(Roles = "Admin,StorageManager")]
@@ -102,9 +115,16 @@ public class SupplyOrderController : ControllerBase
         if (!Enum.TryParse<SupplyOrderStatusEnum>(dto.Status, true, out var newStatus))
             return BadRequest($"Invalid status: {dto.Status}. Valid values: {string.Join(", ", Enum.GetNames<SupplyOrderStatusEnum>())}");
 
+        // Determine actor role from JWT claims for notification routing
+        AppRole? actorRole = null;
+        if (User.IsInRole("Admin"))
+            actorRole = AppRole.Admin;
+        else if (User.IsInRole("StorageManager"))
+            actorRole = AppRole.StorageManager;
+
         try
         {
-            var updated = await _service.UpdateStatusAsync(id, newStatus);
+            var updated = await _service.UpdateStatusAsync(id, newStatus, actorRole);
             return Ok(updated);
         }
         catch (InvalidOperationException ex)
@@ -152,6 +172,29 @@ public class SupplyOrderController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Delete a supply order (Admin only)
+    /// Only allowed for Stored or Cancelled orders
+    /// </summary>
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        try
+        {
+            await _service.DeleteOrderAsync(id);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return NotFound(ex.Message);
         }
     }
 }

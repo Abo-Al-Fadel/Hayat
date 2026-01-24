@@ -25,6 +25,22 @@ public class UsersController : ControllerBase
     [HttpDelete("{userId}")]
     public async Task<IActionResult> Delete(string userId)
     {
+        // SAFETY: Extract current user ID from JWT claims to prevent self-deletion
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
+            ?? User.FindFirstValue("nameid") 
+            ?? User.FindFirstValue("sub");
+
+        if (string.IsNullOrEmpty(currentUserId))
+        {
+            return Unauthorized("Could not identify the current user.");
+        }
+
+        // BLOCK: Admins cannot delete themselves to prevent zero-admin state
+        if (userId == currentUserId)
+        {
+            return BadRequest("You cannot delete your own account. Ask another admin to remove you.");
+        }
+
         await _service.DeleteUserAsync(userId);
         return Ok("User deleted successfully");
     }

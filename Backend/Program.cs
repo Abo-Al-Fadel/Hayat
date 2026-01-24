@@ -96,9 +96,11 @@ builder.Services.AddCors(options =>
         policy
             .WithOrigins(
                 "http://localhost:3000",      // React dev server
-                "http://localhost:3001",      // Alternate React port
+                "http://localhost:3001",      // Alternate React port 1
+                "http://localhost:3002",      // Alternate React port 2
                 "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001"
+                "http://127.0.0.1:3001",
+                "http://127.0.0.1:3002"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
