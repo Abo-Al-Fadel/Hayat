@@ -148,41 +148,21 @@ export default function StorageManagerDashboard() {
     }
   }, []);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // SignalR - Real-time notifications
-  // FIX: Backend now sends ONLY ReceiveNotification (no duplicates)
-  // ──────────────────────────────────────────────────────────────────────────
+  // SignalR handlers
   const signalRHandlers = useMemo(() => ({
-    // Generic notification handler - handles all supply order events
     ReceiveNotification: (payload: any) => {
-      console.log("[SignalR] ============================================");
-      console.log("[SignalR] event received: ReceiveNotification");
-      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[SignalR] ============================================");
-      
       if (payload.type === "supplyorder") {
         toast.success(payload.message || "Supply order updated", { icon: "📦" });
         fetchSupplyOrders();
         fetchNotifications();
-        console.log("[Realtime] UI updated from event");
       }
     },
     
-    // GLOBAL STOCK UPDATE EVENT - Fired when stock is "Stored"
-    // This updates product quantities across ALL dashboards
+    // Stock stored event
     StockUpdated: (payload: any) => {
-      console.log("[SignalR] ============================================");
-      console.log("[SignalR] event received: StockUpdated");
-      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[SignalR] ============================================");
-      
-      // Refresh supply orders (the stored order should now be updated)
       fetchSupplyOrders();
-      
-      // Use backend-provided message with medicine names and quantities
       const message = payload?.message || `Stock stored: ${payload?.items?.length ?? 0} item(s) added`;
       toast.success(message, { icon: "✅" });
-      console.log("[Realtime] UI updated from event");
     },
   }), [fetchSupplyOrders, fetchNotifications]);
 
@@ -196,10 +176,8 @@ export default function StorageManagerDashboard() {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
-    // Check token
     const token = localStorage.getItem("token");
     if (!token) {
-      console.log("[StorageManager] No token, redirecting to /login");
       navigate("/login", { replace: true });
       return;
     }
@@ -252,11 +230,7 @@ export default function StorageManagerDashboard() {
   const handleLogoClick = () => navigate("/");
 
   const handleLogout = () => {
-    console.log("[StorageManager] Logout clicked");
-    // 1. Clear auth state and localStorage via AuthContext
     logout();
-    // 2. Navigate to login AFTER auth is cleared
-    console.log("[Auth] redirecting to /login");
     navigate("/login", { replace: true });
   };
 

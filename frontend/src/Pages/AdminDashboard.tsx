@@ -260,69 +260,26 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  // SignalR - handlers for receiving notifications from other roles
-  // Admin receives notifications when:
-  // - Storage Manager changes supply order status
-  // - LOW STOCK ALERTS when medicine drops below threshold after sale
-  // - SILENT STOCK UPDATES when Pharmacist sells (no notification, just state update)
+  // SignalR handlers
   const signalRHandlers = useMemo(() => ({
-    // Listen for the correct event name from backend
-    // FIX: Backend now sends ONLY ReceiveNotification (no duplicates)
     ReceiveNotification: (payload: any) => {
-      console.log("[SignalR] event received: ReceiveNotification", payload);
-      
-      // REMOVED: Order notifications - Admin no longer receives sale notifications
-      // Backend now suppresses these entirely
-      
-      // Handle supply order status changes from StorageManager
+      // Handle supply order status changes
       if (payload?.type === "supplyorder") {
-        // Refresh supply stocks list
         getSupplyStocks().then(data => setSupplyStocks(data)).catch(console.error);
-        // Refresh notifications
         fetchNotifications();
-        // Show toast for status change
         toast.success(payload.message || "Supply order updated", { icon: "📦" });
       }
-      
-      // NOTE: Low stock alerts are handled ONLY by the dedicated LowStockAlert handler
-      // Do NOT handle them here to prevent duplicates
-      
-      console.log("[Realtime] UI updated from event");
     },
     
-    // ═══════════════════════════════════════════════════════════════════════
-    // MEDICINE STOCK UPDATED - SILENT data sync (NO toast, NO notification)
-    // This is the dedicated event for real-time stock updates from Pharmacist sales
-    // ═══════════════════════════════════════════════════════════════════════
+    // SILENT stock sync from Pharmacist sales
     MedicineStockUpdated: (payload: any) => {
-      console.log("[SignalR] ============================================");
-      console.log("[SignalR] MedicineStockUpdated received (SILENT)");
-      console.log("[SignalR] Medicine ID:", payload?.medicineId);
-      console.log("[SignalR] New Stock:", payload?.newStock);
-      console.log("[SignalR] Changed By:", payload?.changedBy);
-      console.log("[SignalR] ============================================");
-      
-      // Update product stock in state SILENTLY - no toast, no notification
       if (payload?.medicineId && typeof payload?.newStock === "number") {
         updateLocalProduct(payload.medicineId, { stock: payload.newStock });
-        console.log("[SignalR] Stock updated silently for medicine", payload.medicineId);
       }
-      
-      // NO toast - this is intentionally silent
-      // NO fetchNotifications - this is not a notification
     },
     
-    // Dedicated LOW STOCK ALERT event handler
-    // This fires ONLY when stock crosses below threshold (e.g., 31→30)
+    // Low stock alert - fires when stock crosses threshold
     LowStockAlert: (payload: any) => {
-      console.log("[SignalR] ============================================");
-      console.log("[SignalR] LowStockAlert sent ONCE");
-      console.log("[SignalR] Medicine:", payload?.medicineName);
-      console.log("[SignalR] Current Qty:", payload?.currentQuantity);
-      console.log("[SignalR] ============================================");
-      
-      // Note: Stock already updated via MedicineStockUpdated event
-      // Refresh notifications for bell count
       fetchNotifications();
       
       // Show prominent warning toast (message already formatted by backend)
@@ -338,38 +295,18 @@ export default function AdminDashboard() {
       });
     },
     
-    // INVENTORY UPDATE EVENT - Fired when stock is "Stored" (supply order)
-    // This updates product quantities on Admin dashboard
+    // Inventory update - fired when supply order is "Stored"
     StockUpdated: (payload: any) => {
-      console.log("[SignalR] ============================================");
-      console.log("[SignalR] event received: StockUpdated");
-      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[SignalR] ============================================");
-      
-      // Refresh products to show updated stock quantities
       reloadProducts();
-      // Also refresh supply stocks list
       getSupplyStocks().then(data => setSupplyStocks(data)).catch(console.error);
-      
-      // Use backend-provided message with medicine names and quantities
       const message = payload?.message || `Stock updated: ${payload?.items?.length ?? 0} item(s) added`;
       toast.success(message, { icon: "📦" });
-      console.log("[Realtime] UI updated from event");
     },
     
-    // Legacy event names for backwards compatibility (no longer sent by backend)
-    MedicineCreated: () => {
-      console.log("[SignalR] event received: MedicineCreated");
-      reloadProducts();
-    },
-    MedicineUpdated: () => {
-      console.log("[SignalR] event received: MedicineUpdated");
-      reloadProducts();
-    },
-    MedicineDeleted: () => {
-      console.log("[SignalR] event received: MedicineDeleted");
-      reloadProducts();
-    },
+    // Legacy handlers
+    MedicineCreated: () => reloadProducts(),
+    MedicineUpdated: () => reloadProducts(),
+    MedicineDeleted: () => reloadProducts(),
   }), [reloadProducts, fetchNotifications, updateLocalProduct]);
   
   const { invoke } = useSignalR("/hubs/notifications", signalRHandlers);
@@ -377,41 +314,28 @@ export default function AdminDashboard() {
   // Confirm Modal
   const { isOpen: confirmOpen, target: confirmTarget, targetName: confirmName, loading: confirmLoading, open: openConfirm, close: closeConfirm, setLoading: setConfirmLoading } = useConfirmModal<number>();
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Section Persistence - persist active section to localStorage on change
-  // ──────────────────────────────────────────────────────────────────────────
+  // Persist active section
   useEffect(() => {
     persistSection(activePage);
   }, [activePage]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Initial fetch - runs ONCE on mount
-  // ──────────────────────────────────────────────────────────────────────────
+  // Initial fetch
   const didInitRef = useRef(false);
   
   useEffect(() => {
-    // StrictMode guard - only run once
     if (didInitRef.current) return;
     didInitRef.current = true;
     
-    // Check token from localStorage (shared across all tabs)
-    const TOKEN_KEY = "token";
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem("token");
     if (!token) {
-      console.log("[Admin] No token in localStorage, redirecting to /login");
       navigate("/login", { replace: true });
       return;
     }
     
-    console.log("[Admin] Dashboard mounted with valid token");
-    
-    // Fetch notifications on mount
     fetchNotifications();
   }, [navigate, fetchNotifications]);
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Notification Handlers
-  // ──────────────────────────────────────────────────────────────────────────
+  // Notification handlers
   const handleMarkNotificationRead = useCallback(async (id: number) => {
     try {
       await markNotificationsRead([id]);

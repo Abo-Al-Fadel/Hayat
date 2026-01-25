@@ -290,20 +290,14 @@ const PharmacistDashboard: React.FC = () => {
   const fetchNotifications = async () => {
     try {
       const token = getToken();
-      if (!token) {
-        console.log("[Pharmacist] No token, skipping notifications fetch");
-        return;
-      }
-      console.log("[Pharmacist] Fetching notifications from API...");
+      if (!token) return;
+      
       const res = await fetch(NOTIFICATIONS_ENDPOINT, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) {
-        console.log("[Pharmacist] Notifications fetch failed, status:", res.status);
-        return;
-      }
+      if (!res.ok) return;
+      
       const data = await res.json();
-      console.log("[Pharmacist] Notifications API response, count:", data?.length);
       const mapped: NotificationItem[] = (data || []).map((n: any, idx: number) => {
         const serverId = n.id ?? n.notificationId ?? null;
         const cid = serverId ? `db-${serverId}` : `db-${Date.now()}-${idx}`;
@@ -318,7 +312,6 @@ const PharmacistDashboard: React.FC = () => {
 
       if (mapped.length > 0) {
         mergeNotifications(mapped.reverse());
-        console.log("[Pharmacist] Merged notifications into state");
       }
     } catch (err) {
       console.error("[Pharmacist] Notifications fetch error:", err);
@@ -369,11 +362,7 @@ const PharmacistDashboard: React.FC = () => {
    * - Supports pagination for performance
    */
   const fetchProducts = useCallback(async (categoryId: number | null = null, page: number = 1, append: boolean = false) => {
-    // Skip if logging out
-    if (isLoggingOutRef.current) {
-      console.log("[API] fetchProducts canceled - logout in progress");
-      return;
-    }
+    if (isLoggingOutRef.current) return;
     
     try {
       if (append) {
@@ -382,11 +371,7 @@ const PharmacistDashboard: React.FC = () => {
         setLoadingProducts(true);
       }
       const token = getToken();
-      if (!token) {
-        // No token - just return, ProtectedRoute will handle redirect
-        console.log("[API] fetchProducts skipped - no token");
-        return;
-      }
+      if (!token) return;
 
       let url: string;
       if (categoryId === null) {
@@ -402,11 +387,8 @@ const PharmacistDashboard: React.FC = () => {
       });
       
       if (!res.ok) {
-        // Handle 401 Unauthorized - token expired or invalid
         if (res.status === 401) {
-          console.log("[API] 401 in fetchProducts - token invalid");
           localStorage.removeItem("token");
-          // Don't redirect here - ProtectedRoute will handle on next render
           return;
         }
         const txt = await res.text();
@@ -452,18 +434,15 @@ const PharmacistDashboard: React.FC = () => {
     }
   }, []);
 
-  // Initial data load - optimized with Promise.all
+  // Initial data load
   useEffect(() => {
     const loadInitialData = async () => {
-      console.log("[Pharmacist] Loading initial data...");
       try {
-        // Parallel fetch for faster initial load
         await Promise.all([
           fetchProducts(null, 1, false),
           fetchCategories(),
           fetchNotifications()
         ]);
-        console.log("[Pharmacist] Initial data loaded successfully");
       } catch (err) {
         console.error("[Pharmacist] Initial data load failed:", err);
       }
@@ -473,24 +452,15 @@ const PharmacistDashboard: React.FC = () => {
   }, []);
 
   const startConnection = async () => {
-    if (connectionRef.current) {
-      console.log("[Pharmacist] SignalR connection already exists, skipping");
-      return;
-    }
-    if (startingRef.current) {
-      console.log("[Pharmacist] SignalR connection already starting, skipping");
-      return;
-    }
+    if (connectionRef.current) return;
+    if (startingRef.current) return;
     startingRef.current = true;
 
     const token = getToken();
     if (!token) {
-      console.warn("[Pharmacist] No token found, skipping SignalR connection");
       startingRef.current = false;
       return;
     }
-
-    console.log("[Pharmacist] Creating SignalR connection...");
 
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(`${API_BASE}/hubs/notifications`, {
@@ -503,30 +473,14 @@ const PharmacistDashboard: React.FC = () => {
       .build();
 
     const onReceive = (payload: any) => {
-      console.log("[Pharmacist] ============================================");
-      console.log("[Pharmacist] NOTIFICATION RECEIVED!");
-      console.log("[Pharmacist] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[Pharmacist] ============================================");
-      
       try {
-        // DEFENSIVE CHECK: Pharmacist should NOT receive supply order notifications
-        // These are only for Admin and StorageManager
+        // Skip supply order and stock logistics notifications
         const payloadType = payload?.type?.toLowerCase();
         const action = payload?.action ?? payload?.Action ?? "changed";
         
-        if (payloadType === "supplyorder" || action?.includes("supplyorder")) {
-          console.log("[Pharmacist] IGNORING supply order notification - not relevant to Pharmacist role");
-          return;
-        }
+        if (payloadType === "supplyorder" || action?.includes("supplyorder")) return;
+        if (payloadType === "stock" && action === "stockupdated") return;
         
-        // DEFENSIVE CHECK: Pharmacist should NOT receive stock logistics updates
-        // (StockUpdated events are handled separately and now only sent to Admin/StorageManager)
-        if (payloadType === "stock" && action === "stockupdated") {
-          console.log("[Pharmacist] IGNORING stock logistics notification - not relevant to Pharmacist role");
-          return;
-        }
-        
-        // Support both camelCase and PascalCase from backend
         const message = payload?.message ?? payload?.Message ?? payload?.name ?? `Update: ${action}`;
         const serverId = payload?.id ?? payload?.Id ?? null;
         
@@ -538,19 +492,10 @@ const PharmacistDashboard: React.FC = () => {
           serverId: serverId ? Number(serverId) : null,
         };
         
-        // IMMEDIATELY push into notifications state - NO waiting for refetch
-        setNotifications(prev => {
-          const updated = [notif, ...prev];
-          console.log("[Pharmacist] Notification state updated, count:", updated.length);
-          return updated;
-        });
-        
-        // Show toast notification
+        setNotifications(prev => [notif, ...prev]);
         toast.success(message, { duration: 4000 });
         
-        // Refresh products for medicine changes
         if (action === "created" || action === "updated" || action === "deleted") {
-          console.log("[Pharmacist] Refreshing products due to medicine change...");
           fetchProducts(selectedCategoryId, 1, false).catch(() => {});
         }
       } catch (err) {
@@ -558,34 +503,12 @@ const PharmacistDashboard: React.FC = () => {
       }
     };
 
-    // NOTE: StockUpdated event is NO LONGER sent to Pharmacist by backend
-    // Pharmacist only needs to see medicine availability, not supply logistics
-    // The onStockUpdated handler below is kept for backwards compatibility
-    // but backend now only sends StockUpdated to Admin and StorageManager
+    // StockUpdated - legacy handler for backwards compatibility
     const onStockUpdated = (payload: any) => {
-      console.log("[Pharmacist] ============================================");
-      console.log("[Pharmacist] STOCK UPDATED EVENT RECEIVED (unexpected - backend should not send to Pharmacist)");
-      console.log("[Pharmacist] This may indicate a backend version mismatch");
-      console.log("[Pharmacist] ============================================");
-      console.log("[Pharmacist] Payload:", JSON.stringify(payload, null, 2));
-      console.log("[Pharmacist] ============================================");
-      
-      // Refresh products immediately to show new stock quantities
-      console.log("[Pharmacist] Refreshing products due to stock update...");
       fetchProducts(selectedCategoryId, 1, false).catch(console.error);
-      
-      // Use backend-provided message with medicine names and quantities
-      // Example: "Stock updated: Paracetamol (+50 units)"
-      // Example: "Stock updated: 3 medicines added (Paracetamol, Ibuprofen, Aspirin) - Total: +150 units"
       const message = payload?.message || `Stock updated: ${payload?.items?.length ?? 0} item(s) added`;
+      toast.success(message, { icon: "📦", duration: 5000 });
       
-      // Show toast notification with clear medicine information
-      toast.success(message, { 
-        icon: "📦",
-        duration: 5000 
-      });
-      
-      // Also add to notification bell for persistence
       const notif: NotificationItem = {
         id: `stock-${payload?.supplyOrderId ?? ""}-${Date.now()}`,
         message: message,
@@ -596,22 +519,13 @@ const PharmacistDashboard: React.FC = () => {
       setNotifications(prev => [notif, ...prev]);
     };
 
-    // NEW: InventoryStockIncreased handler - stock replenished by StorageManager
-    // This is the PRIMARY event for Pharmacist to know about inventory increases
+    // InventoryStockIncreased - stock replenished by StorageManager
     const onInventoryStockIncreased = (payload: any) => {
-      // REQUIRED LOG FORMAT
-      console.log("[SignalR] InventoryStockIncreased received");
-      console.log("[SignalR] Payload:", JSON.stringify(payload, null, 2));
-      
-      // Update product stock in state directly (NOT refetch)
       const items = payload?.items || [];
       if (items.length > 0) {
         setProducts(prev => prev.map(product => {
           const updated = items.find((item: any) => item.medicineId === product.id);
-          if (updated) {
-            console.log(`[SignalR] Updating ${product.name} stock: ${product.quantity} → ${updated.newQuantity}`);
-            return { ...product, quantity: updated.newQuantity };
-          }
+          if (updated) return { ...product, quantity: updated.newQuantity };
           return product;
         }));
       }
@@ -634,27 +548,23 @@ const PharmacistDashboard: React.FC = () => {
       });
     };
 
-    // Register event handlers BEFORE starting connection
+    // Register handlers
     conn.on("ReceiveNotification", onReceive);
     conn.on("ReceiveMedicineNotification", onReceive);
-    conn.on("StockUpdated", onStockUpdated);  // CRITICAL: Listen for stock updates
-    conn.on("InventoryStockIncreased", onInventoryStockIncreased);  // NEW: Stock replenished event
+    conn.on("StockUpdated", onStockUpdated);
+    conn.on("InventoryStockIncreased", onInventoryStockIncreased);
 
-    conn.onreconnecting((err) => {
-      console.log("[Pharmacist] SignalR reconnecting...", err);
+    conn.onreconnecting(() => {
       toast.loading("Reconnecting to server...", { id: "signalr-reconnect" });
     });
 
-    conn.onreconnected((connectionId) => {
-      console.log("[Pharmacist] SignalR reconnected:", connectionId);
+    conn.onreconnected(() => {
       toast.success("Reconnected!", { id: "signalr-reconnect" });
-      // Silently refresh data on reconnect
       fetchNotifications().catch(() => {});
       fetchProducts(selectedCategoryId, 1, false).catch(() => {});
     });
 
-    conn.onclose((err) => {
-      console.log("[Pharmacist] SignalR connection closed", err);
+    conn.onclose(() => {
       connectionRef.current = null;
       startingRef.current = false;
     });
@@ -664,11 +574,9 @@ const PharmacistDashboard: React.FC = () => {
     const tryStart = async (attempt = 0) => {
       try {
         await conn.start();
-        console.log("[Pharmacist] ✓ SignalR connected successfully!");
-        console.log("[Pharmacist] Connection state:", conn.state);
         fetchNotifications().catch(() => {});
       } catch (err) {
-        console.error("[Pharmacist] SignalR connection failed, attempt:", attempt, err);
+        console.error("[SignalR] Connection failed, attempt:", attempt, err);
         if (attempt < 6) {
           const delay = Math.min(30000, 1000 * Math.pow(2, attempt));
           setTimeout(() => tryStart(attempt + 1), delay);
@@ -687,10 +595,10 @@ const PharmacistDashboard: React.FC = () => {
     try {
       conn.off("ReceiveNotification");
       conn.off("ReceiveMedicineNotification");
-      conn.off("StockUpdated");  // CLEANUP: Remove StockUpdated listener
-      conn.off("InventoryStockIncreased");  // CLEANUP: Remove InventoryStockIncreased listener
+      conn.off("StockUpdated");
+      conn.off("InventoryStockIncreased");
       await conn.stop();
-    } catch (err) {
+    } catch {
       // ignore
     } finally {
       connectionRef.current = null;
