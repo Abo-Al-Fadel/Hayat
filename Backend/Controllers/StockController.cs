@@ -6,7 +6,7 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // general auth
+    [Authorize]
     public class StockController : ControllerBase
     {
         private readonly PharmacyDbContext _context;
@@ -16,10 +16,7 @@ namespace Backend.Controllers
             _context = context;
         }
 
-        // =========================
-        // 1️⃣ Get all stock
-        // =========================
-        // Admin / StorageManager / Pharmacist
+        /// <summary>Get all stock</summary>
         [HttpGet]
         [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
         public async Task<IActionResult> GetAll()
@@ -31,9 +28,7 @@ namespace Backend.Controllers
             return Ok(stocks);
         }
 
-        // =========================
-        // 2️⃣ Get stock by medicine
-        // =========================
+        /// <summary>Get stock by medicine</summary>
         [HttpGet("{medicineId}")]
         [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
         public async Task<IActionResult> GetByMedicine(int medicineId)
@@ -48,10 +43,7 @@ namespace Backend.Controllers
             return Ok(stock);
         }
 
-        // =========================
-        // 3️⃣ Adjust stock manually
-        // =========================
-        // Only Admin / StorageManager
+        /// <summary>Adjust stock manually</summary>
         [HttpPut("{medicineId}/adjust")]
         [Authorize(Roles = "Admin,StorageManager")]
         public async Task<IActionResult> AdjustStock(int medicineId, [FromBody] int quantity)
@@ -71,10 +63,7 @@ namespace Backend.Controllers
             return Ok("Stock updated successfully");
         }
 
-        // =========================
-        // 4️⃣ Get low stock alerts
-        // =========================
-        // Admin / StorageManager
+        /// <summary>Get low stock alerts</summary>
         [HttpGet("low-stock")]
         [Authorize(Roles = "Admin,StorageManager")]
         public async Task<IActionResult> GetLowStock([FromQuery] int threshold = 10)

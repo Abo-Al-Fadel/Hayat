@@ -53,22 +53,15 @@ namespace Backend.Hubs
                 .Distinct()
                 .ToList() ?? new List<string>();
 
-            Console.WriteLine($"[SignalR] ============================================");
-            Console.WriteLine($"[SignalR] User '{userId}' CONNECTED");
-            Console.WriteLine($"[SignalR] ConnectionId: {connectionId}");
-            Console.WriteLine($"[SignalR] Roles from JWT: [{string.Join(", ", roles)}]");
+            Console.WriteLine($"[SignalR] User '{userId}' connected, roles: [{string.Join(", ", roles)}]");
 
             foreach (var role in roles)
             {
                 await Groups.AddToGroupAsync(connectionId, role);
-                Console.WriteLine($"[SignalR] ✓ Added to group '{role}'");
             }
             
-            // Also add to user-specific group for targeted messages
+            // User-specific group
             await Groups.AddToGroupAsync(connectionId, $"user_{userId}");
-            Console.WriteLine($"[SignalR] ✓ Added to group 'user_{userId}'");
-            Console.WriteLine($"[SignalR] Total connections for user: {GetConnectionCount(userId)}");
-            Console.WriteLine($"[SignalR] ============================================");
 
             await base.OnConnectedAsync();
         }
@@ -77,21 +70,19 @@ namespace Backend.Hubs
         {
             var connectionId = Context.ConnectionId;
             
-            // Remove this specific connection, not all connections for the user
+            // Remove this specific connection
             if (ConnectionToUser.TryRemove(connectionId, out var userId))
             {
                 if (UserConnections.TryGetValue(userId, out var connections))
                 {
                     connections.Remove(connectionId);
-                    
-                    // Clean up if user has no more connections
                     if (connections.Count == 0)
                     {
                         UserConnections.TryRemove(userId, out _);
                     }
                 }
                 
-                Console.WriteLine($"[SignalR] User '{userId}' disconnected connectionId: {connectionId}. Remaining connections: {GetConnectionCount(userId)}");
+                Console.WriteLine($"[SignalR] User '{userId}' disconnected. Remaining: {GetConnectionCount(userId)}");
             }
 
             await base.OnDisconnectedAsync(exception);

@@ -47,6 +47,7 @@ public class NotificationService : INotificationService
             return;
         }
 
+        var role = targetRole.Value;
         var message = action switch
         {
             NotificationAction.Created => $"New medicine added: {medicine.Name}",
@@ -57,7 +58,7 @@ public class NotificationService : INotificationService
 
         var notif = new Notification
         {
-            TargetRole = targetRole.ToString(),
+            TargetRole = role.ToString(),
             Action = action,
             MedicineId = medicine.Id,
             MedicineName = medicine.Name,
@@ -67,7 +68,6 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        // Payload with camelCase property names for frontend JavaScript
         var payload = new
         {
             id = notif.Id,
@@ -79,17 +79,10 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        // Log the broadcast for debugging
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] BROADCASTING ReceiveNotification");
-        _logger.LogInformation("[SignalR] Target Group: {Role}", targetRole.ToString());
-        _logger.LogInformation("[SignalR] Action: {Action}", action.ToString().ToLower());
-        _logger.LogInformation("[SignalR] Message: {Message}", message);
-        _logger.LogInformation("[SignalR] Payload: {@Payload}", payload);
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to {Role}: {Action} {Medicine}", 
+            role, action.ToString().ToLower(), medicine.Name);
 
-        // Send to role-based group (e.g., "Pharmacist")
-        await _hub.Clients.Group(targetRole.ToString())
+        await _hub.Clients.Group(role.ToString())
                           .SendAsync("ReceiveNotification", payload);
     }
 
@@ -98,6 +91,7 @@ public class NotificationService : INotificationService
         var targetRole = GetTargetRole(actorRole, "Stock");
         if (targetRole == null) return;
 
+        var role = targetRole.Value;
         var message = action switch
         {
             NotificationAction.Created => $"New stock added: {stock.Medicine.Name}",
@@ -108,7 +102,7 @@ public class NotificationService : INotificationService
 
         var notif = new Notification
         {
-            TargetRole = targetRole.ToString(),
+            TargetRole = role.ToString(),
             Action = action,
             MedicineId = stock.MedicineId,
             MedicineName = stock.Medicine.Name,
@@ -118,11 +112,9 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        // Use lowercase property names for frontend compatibility
-        _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to group '{Role}': {Message}", 
-            targetRole.ToString(), message);
+        _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to {Role}: {Message}", role, message);
             
-        await _hub.Clients.Group(targetRole.ToString())
+        await _hub.Clients.Group(role.ToString())
                           .SendAsync("ReceiveNotification", new
                           {
                               id = notif.Id,
@@ -176,10 +168,7 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] BROADCASTING SupplyOrderCreated to StorageManager");
-        _logger.LogInformation("[SignalR] Supply Order ID: {Id}, Supplier: {Supplier}", supplyOrder.Id, supplierName);
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] Broadcasting SupplyOrderCreated to StorageManager: Order {Id}", supplyOrder.Id);
 
         var payload = new
         {
@@ -202,8 +191,6 @@ public class NotificationService : INotificationService
 
     /// <summary>
     /// Notify about supply order status changes
-    /// - When StorageManager changes status → Notify Admin
-    /// - When Admin changes status (Approve/Order) → Notify StorageManager
     /// </summary>
     public async Task NotifySupplyOrderStatusChangedAsync(SupplyOrder supplyOrder, SupplyOrderStatusEnum oldStatus, AppRole actorRole)
     {
@@ -214,12 +201,13 @@ public class NotificationService : INotificationService
             return;
         }
 
+        var role = targetRole.Value;
         var actorName = actorRole == AppRole.StorageManager ? "Storage Manager" : "Admin";
         var message = $"Supply order #{supplyOrder.Id} status changed from '{oldStatus}' to '{supplyOrder.Status}' by {actorName}";
 
         var notif = new Notification
         {
-            TargetRole = targetRole.ToString(),
+            TargetRole = role.ToString(),
             Action = NotificationAction.StatusChanged,
             SupplyOrderId = supplyOrder.Id,
             SupplyOrderName = $"Order #{supplyOrder.Id}",
@@ -231,10 +219,8 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] BROADCASTING SupplyOrderStatusChanged to {Role}", targetRole);
-        _logger.LogInformation("[SignalR] Supply Order ID: {Id}, {OldStatus} → {NewStatus}", supplyOrder.Id, oldStatus, supplyOrder.Status);
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] Broadcasting SupplyOrderStatusChanged to {Role}: Order {Id} {Old} → {New}", 
+            role, supplyOrder.Id, oldStatus, supplyOrder.Status);
 
         var payload = new
         {
@@ -250,25 +236,16 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        // FIX: Send ONLY ONE event - ReceiveNotification (removes duplicate)
-        await _hub.Clients.Group(targetRole.ToString())
+        await _hub.Clients.Group(role.ToString())
                           .SendAsync("ReceiveNotification", payload);
     }
 
     /// <summary>
-    /// INVENTORY UPDATE EVENT - Broadcasts to Admin and StorageManager ONLY
-    /// Called when supply order is "Stored" and inventory quantities are updated
-    /// 
-    /// CRITICAL: Pharmacist is EXCLUDED from supply logistics notifications
-    /// Pharmacist only receives: medicine price/name changes, NOT supply order events
+    /// INVENTORY UPDATE - Broadcasts to Admin and StorageManager ONLY
     /// </summary>
     public async Task BroadcastStockUpdateAsync(SupplyOrder supplyOrder, List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)> stockChanges)
     {
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] BROADCASTING StockUpdated to Admin + StorageManager ONLY");
-        _logger.LogInformation("[SignalR] Supply Order ID: {Id}, Items: {Count}", supplyOrder.Id, stockChanges.Count);
-        _logger.LogInformation("[SignalR] Pharmacist EXCLUDED (supply logistics not relevant to sales)");
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] Broadcasting StockUpdated: Order {Id}, {Count} items", supplyOrder.Id, stockChanges.Count);
 
         // Build detailed message with medicine names
         string message;
@@ -302,12 +279,10 @@ public class NotificationService : INotificationService
             }).ToList()
         };
 
-        // CRITICAL: Only Admin and StorageManager receive supply logistics notifications
-        // Pharmacist is EXCLUDED - they don't need to know about supply order processing
+        // Send to Admin and StorageManager only
         var roles = new[] { "Admin", "StorageManager" };
         foreach (var role in roles)
         {
-            _logger.LogInformation("[SignalR] Sending StockUpdated to group: {Role}", role);
             await _hub.Clients.Group(role).SendAsync("StockUpdated", payload);
         }
     }
@@ -350,11 +325,8 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        _logger.LogWarning("[SignalR] ============================================");
-        _logger.LogWarning("[SignalR] LOW STOCK ALERT - Admin ONLY");
-        _logger.LogWarning("[SignalR] Medicine: {Name}, Qty: {Qty}, Threshold: {Threshold}", 
+        _logger.LogWarning("[SignalR] LowStockAlert: {Name}, Qty: {Qty}, Threshold: {Threshold}", 
             medicine.Name, medicine.Quantity, medicine.LowStockThreshold);
-        _logger.LogWarning("[SignalR] ============================================");
 
         var payload = new
         {
@@ -372,26 +344,15 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        // CRITICAL: Send ONLY ONE event to avoid duplicates
-        // LowStockAlert is the dedicated event - do NOT also send ReceiveNotification
-        _logger.LogInformation("[SignalR] LowStockAlert → Admin ONLY (single event)");
         await _hub.Clients.Group("Admin").SendAsync("LowStockAlert", payload);
     }
 
     /// <summary>
-    /// SILENT STOCK UPDATE - Broadcasts to Admin ONLY for real-time stock display sync
-    /// NO toast, NO notification bell - just state update in Admin's product list
-    /// Called after every Pharmacist sale to keep Admin product list in sync
-    /// 
-    /// This is NOT a notification - it's a data sync event
+    /// SILENT STOCK UPDATE - Admin only for real-time display sync
     /// </summary>
     public async Task NotifyMedicineStockUpdatedAsync(int medicineId, string medicineName, int newQuantity, int soldQuantity)
     {
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] MedicineStockUpdated sent to Admin");
-        _logger.LogInformation("[SignalR] Medicine: {Name} (ID: {Id})", medicineName, medicineId);
-        _logger.LogInformation("[SignalR] New Quantity: {Qty}, Sold: {Sold}", newQuantity, soldQuantity);
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] MedicineStockUpdated: {Name}, Qty: {Qty}", medicineName, newQuantity);
 
         var payload = new
         {
@@ -403,20 +364,11 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        // Send ONLY to Admin - this is a SILENT data sync event
-        // Frontend MUST NOT show toast or notification for this event
         await _hub.Clients.Group("Admin").SendAsync("MedicineStockUpdated", payload);
     }
 
     /// <summary>
     /// INVENTORY STOCK INCREASED - Notifies Pharmacist and Admin when supply order is STORED
-    /// Shows toast with medicine names and quantities added to inventory
-    /// 
-    /// Business Rules:
-    /// - Triggered when StorageManager marks supply order as STORED
-    /// - Pharmacist needs to know inventory is replenished (to sell)
-    /// - Admin needs to know for oversight
-    /// - StorageManager is EXCLUDED - they just stored it, they know
     /// </summary>
     public async Task NotifyInventoryStockIncreasedAsync(
         SupplyOrder supplyOrder, 
@@ -424,7 +376,7 @@ public class NotificationService : INotificationService
     {
         if (!stockChanges.Any()) return;
 
-        // Build user-friendly message with medicine names and quantities
+        // Build message
         string message;
         int totalAdded = stockChanges.Sum(c => c.AddedQuantity);
         
@@ -443,14 +395,7 @@ public class NotificationService : INotificationService
             message = $"📦 Stock Replenished: {stockChanges.Count} medicines - Total: +{totalAdded} units";
         }
 
-        _logger.LogInformation("[SignalR] ============================================");
-        _logger.LogInformation("[SignalR] INVENTORY STOCK INCREASED - Pharmacist & Admin");
-        _logger.LogInformation("[SignalR] SupplyOrder: {Id}, Items: {Count}", supplyOrder.Id, stockChanges.Count);
-        foreach (var item in stockChanges)
-        {
-            _logger.LogInformation("[SignalR][InventoryStockIncreased] medicine={Name} qty={Qty}", item.MedicineName, item.AddedQuantity);
-        }
-        _logger.LogInformation("[SignalR] ============================================");
+        _logger.LogInformation("[SignalR] InventoryStockIncreased: Order {Id}, {Count} items", supplyOrder.Id, stockChanges.Count);
 
         var payload = new
         {
@@ -468,12 +413,10 @@ public class NotificationService : INotificationService
             }).ToList()
         };
 
-        // CRITICAL: Send to Pharmacist and Admin ONLY
-        // StorageManager is excluded - they just stored it
+        // Send to Pharmacist and Admin only
         var roles = new[] { "Pharmacist", "Admin" };
         foreach (var role in roles)
         {
-            _logger.LogInformation("[SignalR] Sending InventoryStockIncreased to group: {Role}", role);
             await _hub.Clients.Group(role).SendAsync("InventoryStockIncreased", payload);
         }
     }
