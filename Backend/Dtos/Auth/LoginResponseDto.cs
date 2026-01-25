@@ -1,7 +1,3 @@
-/// <summary>
-/// Login response DTO - Returns token and user info
-/// NO cookies, NO server sessions - stateless JWT auth only
-/// </summary>
 public class LoginResponseDto
 {
     public string Token { get; set; } = string.Empty;

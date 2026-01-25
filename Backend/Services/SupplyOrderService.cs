@@ -1,22 +1,6 @@
 using Backend.Services;
 using Microsoft.EntityFrameworkCore;
 
-/// <summary>
-/// Service for managing supply orders with proper status transitions
-/// 
-/// Status Flow:
-/// Created → Approved → Ordered → Shipped → Received → Stored
-///                                    ↓
-///                              Cancelled (only before Shipped)
-/// 
-/// Inventory Update Logic:
-/// When status changes to "Stored", the ordered quantities are atomically
-/// added to the pharmacy's main stock (Medicines table quantity field).
-/// 
-/// Real-time Notifications:
-/// - When Admin creates order → Notify StorageManager
-/// - When status changes → Notify the other role (Admin ↔ StorageManager)
-/// </summary>
 public class SupplyOrderService : ISupplyOrderService
 {
     private readonly PharmacyDbContext _context;
@@ -45,15 +29,14 @@ public class SupplyOrderService : ISupplyOrderService
             SupplierName = order.Supplier?.Name ?? "",
             Status = order.Status,
             Notes = order.Notes,
-            // Map items with UnitPrice (BUY price) from stored supply order data
-            // Include MedicineImageUrl for Storage Manager visual identification
+            
             Items = order.Items.Select(i => new SupplyOrderItemDto
             {
                 MedicineId = i.MedicineId,
                 MedicineName = i.Medicine?.Name ?? "",
                 Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice,  // BUY price stored with supply order
-                MedicineImageUrl = i.Medicine?.Image  // Image URL for Storage Manager UI
+                UnitPrice = i.UnitPrice,  
+                MedicineImageUrl = i.Medicine?.Image  
             }).ToList()
         };
     }
@@ -93,17 +76,15 @@ public class SupplyOrderService : ISupplyOrderService
         _context.SupplyOrders.Add(order);
         await _context.SaveChangesAsync();
 
-        // Notify Storage Manager about new supply order (when status becomes Ordered)
-        // Note: We don't notify on Created, only when it reaches Ordered status
-        // because that's when Storage Manager needs to act
-
         return MapToDto(order);
     }
 
     // Get all supply orders
     public async Task<List<SupplyOrderDto>> GetAllAsync()
     {
+        // AsNoTracking for read-only listing (better performance)
         var orders = await _context.SupplyOrders
+            .AsNoTracking()
             .Include(o => o.Supplier)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Medicine)
@@ -116,7 +97,9 @@ public class SupplyOrderService : ISupplyOrderService
     // Get active orders (includes Stored so Admin can delete, excludes only Cancelled)
     public async Task<List<SupplyOrderDto>> GetActiveOrdersAsync()
     {
+        // AsNoTracking for read-only listing (better performance)
         var orders = await _context.SupplyOrders
+            .AsNoTracking()
             .Include(o => o.Supplier)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Medicine)
@@ -130,7 +113,9 @@ public class SupplyOrderService : ISupplyOrderService
     // Get by ID
     public async Task<SupplyOrderDto?> GetByIdAsync(int id)
     {
+        // AsNoTracking for read-only query (better performance)
         var order = await _context.SupplyOrders
+            .AsNoTracking()
             .Include(o => o.Supplier)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Medicine)
@@ -142,7 +127,9 @@ public class SupplyOrderService : ISupplyOrderService
     // Get by status
     public async Task<List<SupplyOrderDto>> GetByStatusAsync(SupplyOrderStatusEnum status)
     {
+        // AsNoTracking for read-only listing (better performance)
         var orders = await _context.SupplyOrders
+            .AsNoTracking()
             .Include(o => o.Supplier)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Medicine)
@@ -152,18 +139,6 @@ public class SupplyOrderService : ISupplyOrderService
 
         return orders.Select(MapToDto).ToList();
     }
-
-    /// <summary>
-    /// Update supply order status with validation, date tracking, and real-time notifications
-    /// 
-    /// Status Transition Rules:
-    /// - Created → Approved (Admin)
-    /// - Approved → Ordered (Admin) → Notifies StorageManager
-    /// - Ordered → Shipped (StorageManager) → Notifies Admin
-    /// - Shipped → Received (StorageManager) → Notifies Admin
-    /// - Received → Stored (StorageManager) - triggers inventory update → Notifies Admin
-    /// - Any before Shipped → Cancelled (Admin) → Notifies StorageManager
-    /// </summary>
     public async Task<SupplyOrderDto> UpdateStatusAsync(int id, SupplyOrderStatusEnum newStatus, AppRole? actorRole = null)
     {
         var order = await _context.SupplyOrders
@@ -274,11 +249,9 @@ public class SupplyOrderService : ISupplyOrderService
         }
     }
 
-    /// <summary>
     /// Add ordered quantities to pharmacy main inventory (Medicine.Quantity)
     /// This is called atomically when status changes to "Stored"
     /// Returns list of stock changes for broadcasting to all roles
-    /// </summary>
     private async Task<List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)>> AddToInventoryAsync(SupplyOrder order)
     {
         var stockChanges = new List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)>();
@@ -296,10 +269,8 @@ public class SupplyOrderService : ISupplyOrderService
         return stockChanges;
     }
 
-    /// <summary>
     /// Update a supply order (only allowed when status is Created)
     /// Edit Restrictions: Cannot edit after approval
-    /// </summary>
     public async Task<SupplyOrderDto> UpdateOrderAsync(int id, UpdateSupplyOrderDto dto)
     {
         var order = await _context.SupplyOrders
@@ -359,14 +330,14 @@ public class SupplyOrderService : ISupplyOrderService
         return MapToDto(order);
     }
 
-    /// <summary>
     /// Get orders visible to Storage Manager
     /// Only returns orders with status: Ordered, Shipped, Received
     /// (Not Created, Approved, Stored, or Cancelled)
-    /// </summary>
     public async Task<List<SupplyOrderDto>> GetOrdersForStorageManagerAsync()
     {
+        // AsNoTracking for read-only listing (better performance)
         var orders = await _context.SupplyOrders
+            .AsNoTracking()
             .Include(o => o.Supplier)
             .Include(o => o.Items)
                 .ThenInclude(i => i.Medicine)
@@ -379,10 +350,8 @@ public class SupplyOrderService : ISupplyOrderService
         return orders.Select(MapToDto).ToList();
     }
 
-    /// <summary>
     /// Delete a supply order (only Stored or Cancelled orders can be deleted by Admin)
     /// This permanently removes the order from the database
-    /// </summary>
     public async Task DeleteOrderAsync(int id)
     {
         var order = await _context.SupplyOrders

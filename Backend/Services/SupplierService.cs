@@ -24,18 +24,25 @@ public class SupplierService : ISupplierService
         return supplier.Id;
     }
 
-    public async Task<bool> UpdateAsync(int id, UpdateSupplierDto dto)
+    public async Task<SupplierDto?> UpdateAsync(int id, UpdateSupplierDto dto)
     {
         var supplier = await _context.Suppliers.FindAsync(id);
         if (supplier == null)
-            return false;
+            return null;
 
         supplier.Name = dto.Name;
         supplier.Phone = dto.Phone;
         supplier.Email = dto.Email;
 
         await _context.SaveChangesAsync();
-        return true;
+        
+        return new SupplierDto
+        {
+            Id = supplier.Id,
+            Name = supplier.Name,
+            Phone = supplier.Phone,
+            Email = supplier.Email
+        };
     }
 
     public async Task<bool> DeleteAsync(int id)
@@ -50,7 +57,9 @@ public class SupplierService : ISupplierService
     }
     public async Task<List<SupplierDto>> GetAllAsync()
     {
+        // AsNoTracking + projection for optimal read-only query
         return await _context.Suppliers
+            .AsNoTracking()
             .Select(s => new SupplierDto
             {
                 Id = s.Id,
@@ -63,7 +72,9 @@ public class SupplierService : ISupplierService
 
     public async Task<SupplierDto?> GetByIdAsync(int id)
     {
+        // AsNoTracking + projection for optimal read-only query
         return await _context.Suppliers
+            .AsNoTracking()
             .Where(s => s.Id == id)
             .Select(s => new SupplierDto
             {

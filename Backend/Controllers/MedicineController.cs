@@ -20,7 +20,6 @@ public class MedicineController : ControllerBase
     [Authorize(Roles = "Admin,Pharmacist")]
     public async Task<IActionResult> GetAll([FromQuery] string? name, [FromQuery] decimal? minPrice, [FromQuery] decimal? maxPrice)
     {
-        // Admin sees all medicines (including hidden), Pharmacist sees only visible
         var isAdmin = User.IsInRole("Admin");
         var meds = await _medicineService.GetAllAsync(name, minPrice, maxPrice, includeHidden: isAdmin);
         return Ok(meds);
@@ -76,7 +75,6 @@ public class MedicineController : ControllerBase
     [Authorize(Roles = "Admin,Pharmacist")]
     public async Task<IActionResult> Search(string name)
     {
-        // Admin sees all medicines (including hidden), Pharmacist sees only visible
         var isAdmin = User.IsInRole("Admin");
         var medicines = await _medicineService.SearchMedicinesAsync(name, includeHidden: isAdmin);
         if (medicines.Count == 0) return NotFound("No medicines found");
@@ -88,7 +86,6 @@ public class MedicineController : ControllerBase
     {
         try
         {
-            // Admin sees all medicines (including hidden), Pharmacist sees only visible
             var isAdmin = User.IsInRole("Admin");
             var medicines = await _medicineService.GetByCategoryAsync(categoryId, includeHidden: isAdmin);
             return Ok(medicines);
@@ -122,5 +119,30 @@ public class MedicineController : ControllerBase
         }
     }
 
+    [HttpPatch("{id}/name")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateName(int id, [FromBody] UpdateMedicineNameDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
 
+        try
+        {
+            var updated = await _medicineService.UpdateNameAsync(id, dto.Name);
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
+    }
 }
+

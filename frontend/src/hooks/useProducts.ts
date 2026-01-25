@@ -4,6 +4,7 @@ import {
   getMedicinesForDisplay,
   addMedicine,
   updateMedicine,
+  updateMedicineName,
   deleteMedicine,
   toggleMedicineVisibility,
   toDisplayMedicine,
@@ -342,6 +343,39 @@ export function useProducts() {
     }
   }, [products]);
 
+  // Update product name only (Admin only)
+  const updateProductName = useCallback(async (id: number, newName: string): Promise<MedicineDisplay | null> => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      throw new Error("Medicine name cannot be empty");
+    }
+
+    setSaving(true);
+    try {
+      const updated = await updateMedicineName(id, trimmedName);
+      const mapped = toDisplayMedicine(updated);
+
+      setProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+      setSavedProducts((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+
+      // Update cache
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as MedicineDisplay[];
+        localStorage.setItem(CACHE_KEY, JSON.stringify(
+          parsed.map((p) => (p.id === id ? mapped : p))
+        ));
+      }
+
+      return mapped;
+    } catch (err) {
+      console.error("Name update failed:", err);
+      throw err; // Re-throw for dashboard to handle
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   return {
     products,
     savedProducts,
@@ -355,6 +389,7 @@ export function useProducts() {
     createProduct,
     updateProduct,
     updateProductImage,
+    updateProductName,
     removeProduct,
     toggleHidden,
     saveAll,

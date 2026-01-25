@@ -7,6 +7,7 @@
  * - Create, update, delete categories
  * - Prevent deleting categories that are in use by products
  * - Cache categories in localStorage for faster initial load
+ * - Real-time sync via SignalR CategoryChanged events
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { 
@@ -75,44 +76,69 @@ export function useCategories() {
   }, []);
 
   /**
-   * Create a new category
-   * Returns the created category on success
+   * Handle real-time category updates from SignalR
+   * Called by dashboard components when CategoryChanged event is received
+   * This is the SINGLE SOURCE OF TRUTH for category state changes
    */
-  const addCategory = useCallback(async (name: string): Promise<Category> => {
-    const created = await createCategory({ name });
+  const handleCategoryChanged = useCallback((payload: { id: number; name: string; action: string }) => {
+    console.log("[Categories] SignalR CategoryChanged:", payload);
+    
     setCategories((prev) => {
-      const updated = [...prev, created];
+      let updated: Category[];
+      
+      switch (payload.action) {
+        case "created":
+          // Filter out any existing entry with same ID first (prevents duplicates)
+          const filtered = prev.filter(c => c.id !== payload.id);
+          updated = [...filtered, { id: payload.id, name: payload.name }];
+          break;
+        case "updated":
+          updated = prev.map(c => c.id === payload.id ? { ...c, name: payload.name } : c);
+          break;
+        case "deleted":
+          updated = prev.filter(c => c.id !== payload.id);
+          break;
+        default:
+          return prev;
+      }
+      
+      // Update cache
       localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(updated));
       return updated;
     });
+  }, []);
+
+  /**
+   * Create a new category
+   * Returns the created category on success
+   * NOTE: Does NOT update local state - SignalR CategoryChanged event handles that
+   * This prevents duplicate entries from race conditions
+   */
+  const addCategory = useCallback(async (name: string): Promise<Category> => {
+    const created = await createCategory({ name });
+    // SignalR CategoryChanged event will update state - no local update needed
     return created;
   }, []);
 
   /**
    * Update an existing category
    * Returns the updated category on success
+   * NOTE: Does NOT update local state - SignalR CategoryChanged event handles that
    */
   const editCategory = useCallback(async (id: number, name: string): Promise<Category> => {
     const updated = await updateCategory(id, { name });
-    setCategories((prev) => {
-      const newCategories = prev.map((c) => (c.id === id ? updated : c));
-      localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(newCategories));
-      return newCategories;
-    });
+    // SignalR CategoryChanged event will update state - no local update needed
     return updated;
   }, []);
 
   /**
    * Delete a category
    * IMPORTANT: Backend should reject if category is in use by products
+   * NOTE: Does NOT update local state - SignalR CategoryChanged event handles that
    */
   const removeCategory = useCallback(async (id: number): Promise<void> => {
     await deleteCategory(id);
-    setCategories((prev) => {
-      const filtered = prev.filter((c) => c.id !== id);
-      localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(filtered));
-      return filtered;
-    });
+    // SignalR CategoryChanged event will update state - no local update needed
   }, []);
 
   useEffect(() => {
@@ -127,5 +153,7 @@ export function useCategories() {
     addCategory,
     editCategory,
     removeCategory,
+    handleCategoryChanged,
+    setCategories,
   };
 }

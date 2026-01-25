@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using AutoMapper;
 using Hayaa.Backend.Dtos.Medicine;
 using Microsoft.EntityFrameworkCore;
+
 namespace Backend.Services
 {
     public class MedicineService : IMedicineService
@@ -204,7 +201,10 @@ namespace Backend.Services
         
         public async Task<List<Medicine>> SearchMedicinesAsync(string name, bool includeHidden = true)
         {
-            var query = _context.Medicines.Where(m => m.Name.Contains(name));
+            // AsNoTracking for read-only search results
+            var query = _context.Medicines
+                .AsNoTracking()
+                .Where(m => m.Name.Contains(name));
             
             if (!includeHidden)
                 query = query.Where(m => !m.IsHidden);
@@ -214,20 +214,22 @@ namespace Backend.Services
 
         public async Task<List<MedicineDto>> GetByCategoryAsync(int categoryId, bool includeHidden = true)
         {
-            // 1️⃣ Check category exists
+            // Check category exists (AsNoTracking for read-only check)
             var categoryExists = await _context.Categories
+                .AsNoTracking()
                 .AnyAsync(c => c.Id == categoryId);
 
             if (!categoryExists)
                 throw new KeyNotFoundException("Category not found");
 
-            // 2️⃣ Get medicines - filter hidden if requested
+            // Get medicines - filter hidden if requested (projection eliminates need for AsNoTracking)
             var query = _context.Medicines.Where(m => m.CategoryId == categoryId);
             
             if (!includeHidden)
                 query = query.Where(m => !m.IsHidden);
 
             var medicines = await query
+                .AsNoTracking()
                 .Select(m => new MedicineDto
                 {
                     Id = m.Id,
@@ -257,6 +259,37 @@ namespace Backend.Services
             _logger.LogInformation("Medicine {Id} visibility toggled to IsHidden={IsHidden}", id, isHidden);
 
             // CRITICAL: Broadcast SignalR notification so Pharmacist dashboard updates immediately
+            await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Updated, medicine, AppRole.Admin);
+
+            return _mapper.Map<MedicineDto>(medicine);
+        }
+
+        public async Task<MedicineDto> UpdateNameAsync(int id, string newName)
+        {
+            if (string.IsNullOrWhiteSpace(newName))
+                throw new ArgumentException("Medicine name cannot be empty.", nameof(newName));
+
+            var medicine = await _context.Medicines.FindAsync(id);
+            if (medicine == null)
+                throw new KeyNotFoundException($"Medicine with id {id} not found.");
+
+            var trimmedName = newName.Trim();
+            
+            // Check for duplicate name (case-insensitive, excluding current medicine)
+            var duplicateExists = await _context.Medicines
+                .AsNoTracking()
+                .AnyAsync(m => m.Id != id && m.Name.ToLower() == trimmedName.ToLower());
+            
+            if (duplicateExists)
+                throw new InvalidOperationException($"A medicine with the name '{trimmedName}' already exists.");
+
+            var oldName = medicine.Name;
+            medicine.Name = trimmedName;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Medicine {Id} name updated from '{OldName}' to '{NewName}'", id, oldName, trimmedName);
+
+            // Broadcast SignalR notification so other dashboards update immediately
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Updated, medicine, AppRole.Admin);
 
             return _mapper.Map<MedicineDto>(medicine);

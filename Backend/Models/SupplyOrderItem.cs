@@ -15,10 +15,6 @@ public class SupplyOrderItem
 
     public int Quantity { get; set; }
     
-    /// <summary>
-    /// Unit price (BUY/COST price) - what pharmacy pays to supplier
-    /// This is stored separately from Medicine.Price (retail/sell price)
-    /// </summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal UnitPrice { get; set; }
 }

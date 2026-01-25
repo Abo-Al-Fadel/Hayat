@@ -16,7 +16,6 @@ namespace Backend.Controllers
             _context = context;
         }
 
-        /// <summary>Get all stock</summary>
         [HttpGet]
         [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
         public async Task<IActionResult> GetAll()
@@ -28,7 +27,6 @@ namespace Backend.Controllers
             return Ok(stocks);
         }
 
-        /// <summary>Get stock by medicine</summary>
         [HttpGet("{medicineId}")]
         [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
         public async Task<IActionResult> GetByMedicine(int medicineId)
@@ -43,7 +41,6 @@ namespace Backend.Controllers
             return Ok(stock);
         }
 
-        /// <summary>Adjust stock manually</summary>
         [HttpPut("{medicineId}/adjust")]
         [Authorize(Roles = "Admin,StorageManager")]
         public async Task<IActionResult> AdjustStock(int medicineId, [FromBody] int quantity)
@@ -63,7 +60,6 @@ namespace Backend.Controllers
             return Ok("Stock updated successfully");
         }
 
-        /// <summary>Get low stock alerts</summary>
         [HttpGet("low-stock")]
         [Authorize(Roles = "Admin,StorageManager")]
         public async Task<IActionResult> GetLowStock([FromQuery] int threshold = 10)

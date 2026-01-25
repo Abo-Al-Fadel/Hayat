@@ -15,8 +15,8 @@ namespace Hayaa.Backend.Dtos.Medicine
         [Range(0, int.MaxValue, ErrorMessage = "Quantity must be non-negative")]
         public int Quantity { get; set; }
         
-        public int? CategoryId { get; set; }  // Optional - null means no category
-        public IFormFile? Image { get; set; } // Optional - null means keep existing image
-        public bool? IsHidden { get; set; }   // Optional - null means don't change visibility
+        public int? CategoryId { get; set; }
+        public IFormFile? Image { get; set; }
+        public bool? IsHidden { get; set; }
     }
 }

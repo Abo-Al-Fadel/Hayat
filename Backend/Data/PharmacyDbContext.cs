@@ -59,7 +59,7 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
 
         entity.Property(m => m.Price)
               .IsRequired()
-              .HasPrecision(18, 2); // optional for money
+              .HasPrecision(18, 2);
 
         entity.Property(m => m.Quantity)
               .IsRequired();

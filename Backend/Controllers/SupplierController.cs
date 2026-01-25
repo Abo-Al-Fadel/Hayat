@@ -25,10 +25,10 @@ public class SupplierController : ControllerBase
     public async Task<IActionResult> Update(int id, UpdateSupplierDto dto)
     {
         var updated = await _service.UpdateAsync(id, dto);
-        if (!updated)
+        if (updated == null)
             return NotFound("Supplier not found");
 
-        return Ok("Supplier updated successfully");
+        return Ok(updated);
     }
 
     [HttpDelete("{id}")]

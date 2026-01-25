@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 public static class DbInitializer
 {
@@ -17,8 +16,7 @@ public static class DbInitializer
                 await roleManager.CreateAsync(new IdentityRole(role));
         }
         
-        // Fix existing medicines with incorrect LowStockThreshold
-        // Default should be 30, not 0 or 10
+        // Default should be 30
         var context = scope.ServiceProvider.GetRequiredService<PharmacyDbContext>();
         var medicinesToFix = await context.Medicines
             .Where(m => m.LowStockThreshold < 30)

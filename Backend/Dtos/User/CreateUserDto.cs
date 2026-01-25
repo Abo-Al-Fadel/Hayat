@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-
+namespace Backend.Dtos.User;
 public class CreateUserDto
 {
     [Required(ErrorMessage = "UserName is required")]

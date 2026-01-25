@@ -5,20 +5,6 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Backend.Hubs
 {
-    /// <summary>
-    /// SignalR Hub for real-time notifications
-    /// 
-    /// MULTI-SESSION SUPPORT:
-    /// - Tracks multiple connections per user using a concurrent dictionary
-    /// - Each browser tab gets its own connectionId
-    /// - Notifications are sent to ALL connections for a user
-    /// - Disconnecting one tab doesn't affect other connections
-    /// 
-    /// ROLE-BASED GROUPS:
-    /// - Users are automatically added to groups based on their JWT role claim
-    /// - Groups: "Admin", "Pharmacist", "StorageManager"
-    /// - Notifications broadcast to role groups reach all users with that role
-    /// </summary>
     [Authorize]
     public class NotificationsHub : Hub
     {
@@ -29,12 +15,25 @@ namespace Backend.Hubs
         // Reverse lookup: connectionId => userId (for efficient OnDisconnectedAsync)
         private static readonly ConcurrentDictionary<string, string> ConnectionToUser = new();
 
+        // Valid roles for SignalR groups
+        private static readonly HashSet<string> ValidRoles = new(StringComparer.OrdinalIgnoreCase) 
+        { 
+            "Admin", "Pharmacist", "StorageManager" 
+        };
+
         public override async Task OnConnectedAsync()
         {
             var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
                       ?? Context.User?.FindFirst("sub")?.Value
-                      ?? Context.User?.Identity?.Name
-                      ?? "anonymous";
+                      ?? Context.User?.Identity?.Name;
+            
+            // SECURITY: Reject connection if no valid user identity
+            if (string.IsNullOrEmpty(userId))
+            {
+                Console.WriteLine("[SignalR] REJECTED: No user identity in token");
+                Context.Abort();
+                return;
+            }
             
             var connectionId = Context.ConnectionId;
             
@@ -50,8 +49,17 @@ namespace Backend.Hubs
             var roles = Context.User?.Claims
                 .Where(c => c.Type == ClaimTypes.Role || c.Type == "role")
                 .Select(c => c.Value)
+                .Where(r => ValidRoles.Contains(r)) // Only allow valid roles
                 .Distinct()
                 .ToList() ?? new List<string>();
+
+            // SECURITY: Reject if no valid roles
+            if (roles.Count == 0)
+            {
+                Console.WriteLine($"[SignalR] REJECTED: User '{userId}' has no valid roles");
+                Context.Abort();
+                return;
+            }
 
             Console.WriteLine($"[SignalR] User '{userId}' connected, roles: [{string.Join(", ", roles)}]");
 
@@ -88,9 +96,6 @@ namespace Backend.Hubs
             await base.OnDisconnectedAsync(exception);
         }
 
-        /// <summary>
-        /// Get all connection IDs for a specific user (for sending targeted notifications)
-        /// </summary>
         public static IEnumerable<string> GetUserConnections(string userId)
         {
             return UserConnections.TryGetValue(userId, out var connections) 
@@ -98,9 +103,6 @@ namespace Backend.Hubs
                 : Array.Empty<string>();
         }
 
-        /// <summary>
-        /// Get the count of active connections for a user
-        /// </summary>
         public static int GetConnectionCount(string userId)
         {
             return UserConnections.TryGetValue(userId, out var connections) 
@@ -108,9 +110,6 @@ namespace Backend.Hubs
                 : 0;
         }
 
-        /// <summary>
-        /// Check if a user has any active connections
-        /// </summary>
         public static bool IsUserConnected(string userId)
         {
             return UserConnections.TryGetValue(userId, out var connections) && connections.Count > 0;

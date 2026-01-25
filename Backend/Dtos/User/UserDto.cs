@@ -1,3 +1,4 @@
+namespace Backend.Dtos.User;
 public class UserDto
 {
     public string Id { get; set; } = string.Empty;

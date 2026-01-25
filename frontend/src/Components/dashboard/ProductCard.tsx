@@ -8,9 +8,14 @@
  * - A medicine is considered "low stock" when stock < 30
  * - Low stock items are highlighted with an amber/warning badge
  * - This is the ONLY place low stock is displayed (removed from Admin header)
+ * 
+ * Name Editing:
+ * - Admin can click the Edit (pencil) icon to edit medicine name
+ * - Inline editing with save/cancel buttons
+ * - Validation: name cannot be empty
  */
-import React from "react";
-import { Eye, EyeOff, Minus, Plus, Trash2, Upload, AlertTriangle } from "lucide-react";
+import React, { useState } from "react";
+import { Eye, EyeOff, Minus, Plus, Trash2, Upload, AlertTriangle, Pencil, Check, X } from "lucide-react";
 import type { MedicineDisplay } from "../../Services/MedicineService";
 import type { Category } from "../../Services/CategoryService";
 
@@ -28,6 +33,7 @@ interface ProductCardProps {
   onToggleHidden: (id: number) => void;
   onDelete: (id: number, name: string) => void;
   onImageChange: (id: number, file: File) => void;
+  onNameChange?: (id: number, newName: string) => Promise<void>;
 }
 
 export function ProductCard({
@@ -41,13 +47,61 @@ export function ProductCard({
   onToggleHidden,
   onDelete,
   onImageChange,
+  onNameChange,
 }: ProductCardProps) {
+  // State for inline name editing
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(product.name);
+  const [isSavingName, setIsSavingName] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     onImageChange(product.id, file);
     e.target.value = "";
+  };
+
+  // Handle name edit start
+  const handleStartEditName = () => {
+    setEditedName(product.name);
+    setIsEditingName(true);
+  };
+
+  // Handle name edit cancel
+  const handleCancelEditName = () => {
+    setEditedName(product.name);
+    setIsEditingName(false);
+  };
+
+  // Handle name save
+  const handleSaveName = async () => {
+    const trimmedName = editedName.trim();
+    if (!trimmedName) return; // Don't save empty names
+    if (trimmedName === product.name) {
+      setIsEditingName(false);
+      return; // No change
+    }
+    if (!onNameChange) return;
+
+    setIsSavingName(true);
+    try {
+      await onNameChange(product.id, trimmedName);
+      setIsEditingName(false);
+    } catch {
+      // Error is handled by parent, keep editing mode open
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
+  // Handle Enter key to save, Escape to cancel
+  const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSaveName();
+    } else if (e.key === "Escape") {
+      handleCancelEditName();
+    }
   };
 
   // Check if product has low stock
@@ -99,7 +153,50 @@ export function ProductCard({
 
       {/* Name & ID & Category */}
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-base truncate">{product.name}</h3>
+        {/* Editable Name */}
+        {isEditingName ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={handleNameKeyDown}
+              disabled={isSavingName}
+              autoFocus
+              className="flex-1 min-w-0 px-2 py-1 text-base font-semibold rounded border border-blue-400 dark:border-blue-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Medicine name"
+            />
+            <button
+              onClick={handleSaveName}
+              disabled={isSavingName || !editedName.trim()}
+              className="p-1 rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 disabled:opacity-50"
+              title="Save name"
+            >
+              <Check className="h-4 w-4" />
+            </button>
+            <button
+              onClick={handleCancelEditName}
+              disabled={isSavingName}
+              className="p-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+              title="Cancel"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 group/name">
+            <h3 className="font-semibold text-base truncate">{product.name}</h3>
+            {onNameChange && (
+              <button
+                onClick={handleStartEditName}
+                className="p-1 rounded opacity-0 group-hover/name:opacity-100 transition-opacity bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400"
+                title="Edit name"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
         <div className="text-sm text-gray-500 dark:text-gray-400">ID: {product.id}</div>
         {onCategoryChange && (
           <select

@@ -1,21 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 
-/// <summary>
-/// Supply Order entity representing orders placed with suppliers
-/// 
-/// Status Flow:
-/// 1. Created   → Admin creates the order
-/// 2. Approved  → Admin approves internally
-/// 3. Ordered   → Admin confirms order sent to supplier
-/// 4. Shipped   → Storage Manager marks as shipped by supplier
-/// 5. Received  → Storage Manager marks as received at pharmacy
-/// 6. Stored    → Added to inventory (triggers stock update)
-/// 7. Cancelled → Admin cancels (only before Shipped)
-/// 
-/// Edit Restrictions:
-/// - Order can only be edited when Status == Created
-/// - Once approved or beyond, items and supplier cannot be changed
-/// </summary>
 public class SupplyOrder
 {
     public int Id { get; set; }

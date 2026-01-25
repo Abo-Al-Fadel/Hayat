@@ -1,11 +1,6 @@
-/// <summary>
-/// Output DTO for supply orders with all status-related timestamps
-/// </summary>
 public class SupplyOrderDto
 {
     public int Id { get; set; }
-    
-    // Timestamps for each status (named consistently for frontend)
     public DateTime CreatedAt { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public DateTime? OrderedAt { get; set; }

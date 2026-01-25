@@ -69,6 +69,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpDelete("{orderId}")]
+    [Authorize(Roles = "Admin,Pharmacist")]
     public async Task<IActionResult> CancelOrder(int orderId)
     {
         var result = await _orderService.CancelOrderAsync(orderId);

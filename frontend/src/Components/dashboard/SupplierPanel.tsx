@@ -1,7 +1,7 @@
 // src/Components/dashboard/SupplierPanel.tsx
 import React, { useState, useMemo, useCallback } from "react";
-import { Truck, Plus, Search, Mail, Phone, MapPin, Trash2 } from "lucide-react";
-import { type Supplier } from "../../Services/SupplierService";
+import { Truck, Plus, Search, Mail, Phone, MapPin, Trash2, Pencil, X, Save, AlertCircle } from "lucide-react";
+import { type Supplier, type UpdateSupplierDto } from "../../Services/SupplierService";
 import { DeleteConfirmModal } from "../ui/DeleteConfirmModal";
 
 interface SupplierPanelProps {
@@ -9,8 +9,23 @@ interface SupplierPanelProps {
   loading: boolean;
   darkMode: boolean;
   onAddSupplier: (supplier: Omit<Supplier, "id">) => Promise<void>;
+  onEditSupplier: (id: number, data: UpdateSupplierDto) => Promise<Supplier>;
   onDeleteSupplier: (id: number) => Promise<void>;
 }
+
+// Validation helpers
+const isValidEmail = (email: string): boolean => {
+  if (!email.trim()) return true; // Empty is valid (optional field)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const isValidPhone = (phone: string): boolean => {
+  if (!phone.trim()) return true; // Empty is valid (optional field)
+  // Phone can contain digits, spaces, hyphens, plus sign, and parentheses
+  const phoneRegex = /^[\d\s\-+()]+$/;
+  return phoneRegex.test(phone) && phone.replace(/[\s\-+()]/g, "").length >= 7;
+};
 
 /**
  * SupplierPanel - Manages supplier list
@@ -19,6 +34,7 @@ interface SupplierPanelProps {
  * - Display suppliers in clean card layout
  * - Search/filter suppliers by name or contact info
  * - Add new suppliers
+ * - Edit supplier name, email, phone via modal
  * - Delete suppliers with custom confirmation modal
  */
 export function SupplierPanel({
@@ -26,6 +42,7 @@ export function SupplierPanel({
   loading,
   darkMode,
   onAddSupplier,
+  onEditSupplier,
   onDeleteSupplier,
 }: SupplierPanelProps) {
   // Search state
@@ -41,6 +58,12 @@ export function SupplierPanel({
     contactInfo: "",
   });
   const [saving, setSaving] = useState(false);
+
+  // Edit modal state
+  const [editTarget, setEditTarget] = useState<Supplier | null>(null);
+  const [editForm, setEditForm] = useState<UpdateSupplierDto>({ name: "", email: "", phone: "" });
+  const [editErrors, setEditErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
+  const [editSaving, setEditSaving] = useState(false);
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
@@ -94,6 +117,61 @@ export function SupplierPanel({
       setDeleting(false);
     }
   }, [deleteTarget, onDeleteSupplier]);
+
+  // Open edit modal
+  const openEditModal = useCallback((supplier: Supplier) => {
+    setEditTarget(supplier);
+    setEditForm({
+      name: supplier.name,
+      email: supplier.email || "",
+      phone: supplier.phone || "",
+    });
+    setEditErrors({});
+  }, []);
+
+  // Close edit modal
+  const closeEditModal = useCallback(() => {
+    setEditTarget(null);
+    setEditForm({ name: "", email: "", phone: "" });
+    setEditErrors({});
+  }, []);
+
+  // Validate edit form
+  const validateEditForm = useCallback((): boolean => {
+    const errors: { name?: string; email?: string; phone?: string } = {};
+    
+    if (!editForm.name.trim()) {
+      errors.name = "Name is required";
+    }
+    
+    if (editForm.email && !isValidEmail(editForm.email)) {
+      errors.email = "Invalid email format";
+    }
+    
+    if (editForm.phone && !isValidPhone(editForm.phone)) {
+      errors.phone = "Invalid phone format";
+    }
+    
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [editForm]);
+
+  // Handle edit save
+  const handleEditSave = useCallback(async () => {
+    if (!editTarget || !validateEditForm()) return;
+
+    setEditSaving(true);
+    try {
+      await onEditSupplier(editTarget.id, {
+        name: editForm.name.trim(),
+        email: editForm.email?.trim() || undefined,
+        phone: editForm.phone?.trim() || undefined,
+      });
+      closeEditModal();
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editTarget, editForm, validateEditForm, onEditSupplier, closeEditModal]);
 
   /**
    * LAYOUT DECOUPLING:
@@ -287,18 +365,34 @@ export function SupplierPanel({
                       </div>
                     </div>
 
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => setDeleteTarget(supplier)}
-                      className={`ml-3 p-2 rounded-lg transition-colors ${
-                        darkMode 
-                          ? "text-red-400 hover:bg-red-900/30" 
-                          : "text-red-500 hover:bg-red-100"
-                      }`}
-                      title="Delete supplier"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* Action Buttons */}
+                    <div className="ml-3 flex items-center gap-1">
+                      {/* Edit Button */}
+                      <button
+                        onClick={() => openEditModal(supplier)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          darkMode 
+                            ? "text-blue-400 hover:bg-blue-900/30" 
+                            : "text-blue-500 hover:bg-blue-100"
+                        }`}
+                        title="Edit supplier"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => setDeleteTarget(supplier)}
+                        className={`p-2 rounded-lg transition-colors ${
+                          darkMode 
+                            ? "text-red-400 hover:bg-red-900/30" 
+                            : "text-red-500 hover:bg-red-100"
+                        }`}
+                        title="Delete supplier"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -306,6 +400,168 @@ export function SupplierPanel({
           )}
         </div>
       </div>
+
+      {/* Edit Supplier Modal */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`w-full max-w-md mx-4 rounded-xl shadow-2xl overflow-hidden ${
+            darkMode ? "bg-gray-800" : "bg-white"
+          }`}>
+            {/* Modal Header */}
+            <div className={`px-5 py-4 border-b flex items-center justify-between ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <h3 className={`text-lg font-semibold ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+                Edit Supplier
+              </h3>
+              <button
+                onClick={closeEditModal}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  darkMode ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Name Field */}
+              <div>
+                <label className={`block text-sm font-medium mb-1.5 ${
+                  darkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => {
+                    setEditForm((prev) => ({ ...prev, name: e.target.value }));
+                    if (editErrors.name) setEditErrors((prev) => ({ ...prev, name: undefined }));
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    editErrors.name 
+                      ? "border-red-500" 
+                      : darkMode ? "border-gray-600" : "border-gray-300"
+                  } ${
+                    darkMode 
+                      ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
+                      : "bg-white text-gray-900 placeholder-gray-500"
+                  }`}
+                  placeholder="Enter supplier name"
+                />
+                {editErrors.name && (
+                  <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {editErrors.name}
+                  </div>
+                )}
+              </div>
+
+              {/* Email Field */}
+              <div>
+                <label className={`block text-sm font-medium mb-1.5 ${
+                  darkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => {
+                    setEditForm((prev) => ({ ...prev, email: e.target.value }));
+                    if (editErrors.email) setEditErrors((prev) => ({ ...prev, email: undefined }));
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    editErrors.email 
+                      ? "border-red-500" 
+                      : darkMode ? "border-gray-600" : "border-gray-300"
+                  } ${
+                    darkMode 
+                      ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
+                      : "bg-white text-gray-900 placeholder-gray-500"
+                  }`}
+                  placeholder="Enter email address"
+                />
+                {editErrors.email && (
+                  <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {editErrors.email}
+                  </div>
+                )}
+              </div>
+
+              {/* Phone Field */}
+              <div>
+                <label className={`block text-sm font-medium mb-1.5 ${
+                  darkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => {
+                    setEditForm((prev) => ({ ...prev, phone: e.target.value }));
+                    if (editErrors.phone) setEditErrors((prev) => ({ ...prev, phone: undefined }));
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    editErrors.phone 
+                      ? "border-red-500" 
+                      : darkMode ? "border-gray-600" : "border-gray-300"
+                  } ${
+                    darkMode 
+                      ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
+                      : "bg-white text-gray-900 placeholder-gray-500"
+                  }`}
+                  placeholder="Enter phone number"
+                />
+                {editErrors.phone && (
+                  <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {editErrors.phone}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className={`px-5 py-4 border-t flex gap-3 ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <button
+                onClick={closeEditModal}
+                disabled={editSaving}
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                  darkMode 
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-200" 
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                } disabled:opacity-50`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editForm.name.trim()}
+                className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {editSaving ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmModal

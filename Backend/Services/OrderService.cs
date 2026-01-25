@@ -60,10 +60,6 @@ public class OrderService : IOrderService
 
         _context.Orders.Add(order);
         await _context.SaveChangesAsync();
-
-        // ═══════════════════════════════════════════════════════════════════════
-        // SignalR BROADCASTS - AFTER SaveChanges() completes (outside transaction)
-        // ═══════════════════════════════════════════════════════════════════════
         
         // 1. SILENT STOCK UPDATE - Admin sees updated stock immediately (NO notification)
         foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
@@ -77,7 +73,6 @@ public class OrderService : IOrderService
         }
         
         // 2. LOW STOCK ALERTS - Check each medicine for threshold crossing
-        // Only alerts when: previousQty > threshold AND newQty <= threshold
         foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
         {
             await _notificationService.NotifyLowStockAlertAsync(medicine, previousQty, soldQty);
@@ -90,7 +85,9 @@ public class OrderService : IOrderService
 
     public async Task<string?> GetInvoiceAsync(int orderId)
     {
+        // AsNoTracking for read-only invoice generation
         var order = await _context.Orders
+            .AsNoTracking()
             .Include(o => o.Items)
             .ThenInclude(i => i.Medicine)
             .FirstOrDefaultAsync(o => o.Id == orderId);
@@ -112,8 +109,9 @@ public class OrderService : IOrderService
 
     public async Task<List<object>> GetOrdersAsync()
     {
+        // Select projection eliminates need for Include (EF optimizes this)
         return await _context.Orders
-            .Include(o => o.Items)
+            .AsNoTracking()
             .Where(o => o.Status != OrderStatus.Cancelled && o.Items.Any())
             .OrderByDescending(o => o.CreatedAt)
             .Select(o => new

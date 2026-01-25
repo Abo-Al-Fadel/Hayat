@@ -15,13 +15,7 @@ public interface ISupplyOrderService
     Task<SupplyOrderDto> UpdateOrderAsync(int id, UpdateSupplyOrderDto dto);
     Task MarkAsReceivedAsync(int supplyOrderId);
     Task<List<SupplyOrderDto>> GetByStatusAsync(SupplyOrderStatusEnum status);
-    Task<List<SupplyOrderDto>> GetActiveOrdersAsync(); // Excludes Stored and Cancelled
-    /// <summary>
-    /// Get orders visible to Storage Manager (Ordered and beyond, not Stored/Cancelled)
-    /// </summary>
+    Task<List<SupplyOrderDto>> GetActiveOrdersAsync();
     Task<List<SupplyOrderDto>> GetOrdersForStorageManagerAsync();
-    /// <summary>
-    /// Delete a supply order (only Stored or Cancelled orders can be deleted)
-    /// </summary>
     Task DeleteOrderAsync(int id);
 }

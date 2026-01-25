@@ -3,14 +3,6 @@ using System;
 
 namespace Hayaa.Backend.Models
 {
-    /// <summary>
-    /// Notification entity for real-time updates between roles
-    /// 
-    /// Target Roles:
-    /// - Admin: Receives notifications from StorageManager (supply order status changes)
-    /// - StorageManager: Receives notifications from Admin (new supply orders)
-    /// - Pharmacist: Receives notifications about medicine changes
-    /// </summary>
     public class Notification
     {
         public int Id { get; set; }

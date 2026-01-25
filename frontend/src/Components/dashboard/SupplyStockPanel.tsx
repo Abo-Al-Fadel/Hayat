@@ -320,7 +320,8 @@ export function SupplyStockPanel({
         unitPrice: storedBuyPrice,          // FROM SUPPLY ORDER
         purchasePrice: storedBuyPrice,      // FOR FORM (editable)
         sellingPrice: medicine?.price || 0, // Reference only
-        image: medicine?.image,
+        // Use image from supply order item (backend), fallback to medicine lookup
+        image: item.medicineImageUrl || medicine?.image,
       };
     });
     
@@ -1286,18 +1287,40 @@ export function SupplyStockPanel({
                         </div>
                       </div>
                       
-                      {/* Items List - shows medicineName, unitPrice, quantity from backend */}
+                      {/* Items List - shows image, medicineName, unitPrice, quantity from backend */}
                       <div className="space-y-2">
                         {stock.items?.map((item, idx) => {
                           // Data comes directly from backend SupplyOrderItemDto
                           // unitPrice is the BUY price, NOT the retail/sell price
                           const lineTotal = item.unitPrice * item.quantity;
+                          // Build image URL from backend medicineImageUrl
+                          const imageUrl = buildImageUrl(item.medicineImageUrl);
                           return (
                             <div key={idx} className={`flex justify-between items-center text-sm py-1 ${
                               darkMode ? "text-gray-300 border-b border-gray-600 last:border-0" : "text-gray-600 border-b border-gray-200 last:border-0"
                             }`}>
-                              {/* Medicine name from backend mapping */}
-                              <span className="flex-1">{item.medicineName}</span>
+                              {/* Medicine image and name from backend */}
+                              <div className="flex items-center gap-2 flex-1">
+                                <div className={`w-8 h-8 rounded overflow-hidden flex-shrink-0 ${
+                                  darkMode ? "bg-gray-600" : "bg-gray-200"
+                                }`}>
+                                  {imageUrl ? (
+                                    <img 
+                                      src={imageUrl} 
+                                      alt={item.medicineName}
+                                      className="w-full h-full object-contain"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div className={`w-full h-full flex items-center justify-center ${imageUrl ? 'hidden' : ''}`}>
+                                    <Package className={`h-4 w-4 ${darkMode ? "text-gray-500" : "text-gray-400"}`} />
+                                  </div>
+                                </div>
+                                <span>{item.medicineName}</span>
+                              </div>
                               {/* Unit price (BUY) and quantity from backend */}
                               <span className={`mx-4 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
                                 ${item.unitPrice.toFixed(2)} × {item.quantity}

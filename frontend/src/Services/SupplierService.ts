@@ -10,6 +10,12 @@ export interface Supplier {
   address?: string;
 }
 
+export interface UpdateSupplierDto {
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
 // GET all suppliers
 export const getSuppliers = async (): Promise<Supplier[]> => {
   const response = await api.get("/api/Supplier");
@@ -28,9 +34,9 @@ export const createSupplier = async (supplier: Omit<Supplier, "id">): Promise<Su
   return response.data;
 };
 
-// UPDATE supplier
-export const updateSupplier = async (id: number, supplier: Partial<Supplier>): Promise<Supplier> => {
-  const response = await api.put(`/api/Supplier/${id}`, supplier);
+// UPDATE supplier - returns updated supplier data
+export const updateSupplier = async (id: number, data: UpdateSupplierDto): Promise<Supplier> => {
+  const response = await api.put(`/api/Supplier/${id}`, data);
   return response.data;
 };
 

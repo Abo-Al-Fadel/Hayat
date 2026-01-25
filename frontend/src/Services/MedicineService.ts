@@ -123,6 +123,12 @@ export const toggleMedicineVisibility = async (id: number, isHidden: boolean): P
   return res.data;
 };
 
+// UPDATE medicine name only (uses PATCH endpoint - Admin only)
+export const updateMedicineName = async (id: number, name: string): Promise<Medicine> => {
+  const res = await api.patch(`/api/Medicine/${id}/name`, { name });
+  return res.data;
+};
+
 // GET medicine by ID
 export const getMedicineById = async (id: number): Promise<Medicine> => {
   const res = await api.get(`/api/Medicine/${id}`);

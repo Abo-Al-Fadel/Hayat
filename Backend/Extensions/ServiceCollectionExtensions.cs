@@ -1,9 +1,7 @@
-using Backend.Profiles;
 using Backend.Services;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System.Text.Json;
 
 

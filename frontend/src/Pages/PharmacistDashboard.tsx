@@ -1,5 +1,5 @@
 // src/Pages/PharmacistDashboard.tsx
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 import logoDark from "../Images/HTL.png";
@@ -548,11 +548,34 @@ const PharmacistDashboard: React.FC = () => {
       });
     };
 
+    // CategoryChanged - real-time category sync
+    // This is the SINGLE SOURCE OF TRUTH for category state changes
+    const onCategoryChanged = (payload: any) => {
+      console.log("[Pharmacist] CategoryChanged received:", payload);
+      const { id, name, action } = payload;
+      
+      setCategories(prev => {
+        switch (action) {
+          case "created":
+            // Filter out any existing entry with same ID first (prevents duplicates)
+            const filtered = prev.filter(c => c.id !== id);
+            return [...filtered, { id, name }];
+          case "updated":
+            return prev.map(c => c.id === id ? { ...c, name } : c);
+          case "deleted":
+            return prev.filter(c => c.id !== id);
+          default:
+            return prev;
+        }
+      });
+    };
+
     // Register handlers
     conn.on("ReceiveNotification", onReceive);
     conn.on("ReceiveMedicineNotification", onReceive);
     conn.on("StockUpdated", onStockUpdated);
     conn.on("InventoryStockIncreased", onInventoryStockIncreased);
+    conn.on("CategoryChanged", onCategoryChanged);
 
     conn.onreconnecting(() => {
       toast.loading("Reconnecting to server...", { id: "signalr-reconnect" });
@@ -562,6 +585,7 @@ const PharmacistDashboard: React.FC = () => {
       toast.success("Reconnected!", { id: "signalr-reconnect" });
       fetchNotifications().catch(() => {});
       fetchProducts(selectedCategoryId, 1, false).catch(() => {});
+      fetchCategories().catch(() => {});
     });
 
     conn.onclose(() => {
@@ -597,6 +621,7 @@ const PharmacistDashboard: React.FC = () => {
       conn.off("ReceiveMedicineNotification");
       conn.off("StockUpdated");
       conn.off("InventoryStockIncreased");
+      conn.off("CategoryChanged");
       await conn.stop();
     } catch {
       // ignore
@@ -830,15 +855,15 @@ const PharmacistDashboard: React.FC = () => {
 
   // Cart logic
   /**
-   * Filter products by search query only
+   * Filter products by search query only - memoized to prevent recalculation on unrelated state changes
    * Category filtering is handled by backend API calls
    * 
    * Note: Hidden medicines are already filtered out during fetch
    */
-  const filteredProducts = products.filter((p) => {
-    // Search filter - client-side for instant response
-    return p.name.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  const filteredProducts = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return products.filter((p) => p.name.toLowerCase().includes(query));
+  }, [products, searchQuery]);
 
   /**
    * Handle category selection - SINGLE SELECT ONLY
@@ -950,7 +975,11 @@ const PharmacistDashboard: React.FC = () => {
     toast.success("Cart cleared");
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.cartQuantity, 0);
+  // Memoize cart total to prevent recalculation on unrelated state changes
+  const total = useMemo(() => 
+    cart.reduce((sum, item) => sum + item.price * item.cartQuantity, 0),
+    [cart]
+  );
 
   const handleCheckout = async () => {
     // Skip if logging out

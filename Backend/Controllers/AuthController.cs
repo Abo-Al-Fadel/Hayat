@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -41,8 +40,6 @@ namespace Backend.Controllers
 
             Console.WriteLine($"[AUTH] Login success — user: {user.UserName} — role: {roles.FirstOrDefault()} — token issued (stateless JWT)");
 
-            // Return EXACTLY: { token, user: { id, username, email, role } }
-            // NO cookies, NO Set-Cookie headers, NO redirectUrl
             return Ok(new LoginResponseDto
             {
                 Token = token,

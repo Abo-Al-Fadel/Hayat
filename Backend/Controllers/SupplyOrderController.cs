@@ -1,18 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-/// <summary>
-/// Controller for Supply Order operations
-/// 
-/// Endpoints:
-/// POST   /api/SupplyOrder           - Create new order (Admin)
-/// GET    /api/SupplyOrder           - Get all orders (Admin, StorageManager)
-/// GET    /api/SupplyOrder/active    - Get active orders only (Admin, StorageManager)
-/// GET    /api/SupplyOrder/{id}      - Get order by ID (Admin, StorageManager)
-/// GET    /api/SupplyOrder/status/{status} - Get by status (Admin, StorageManager)
-/// PATCH  /api/SupplyOrder/{id}/status     - Update status (Admin, StorageManager)
-/// PUT    /api/SupplyOrder/{id}      - Update order details (Admin, only when Created)
-/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class SupplyOrderController : ControllerBase
@@ -81,10 +69,7 @@ public class SupplyOrderController : ControllerBase
         return Ok(orders);
     }
 
-    /// <summary>
-    /// Get orders for Storage Manager (Ordered, Shipped, Received only)
-    /// This endpoint returns orders that require Storage Manager action
-    /// </summary>
+    // Get orders for Storage Manager (Ordered, Shipped, Received only)
     [HttpGet("storage-manager")]
     [Authorize(Roles = "StorageManager")]
     public async Task<IActionResult> GetForStorageManager()
@@ -93,17 +78,7 @@ public class SupplyOrderController : ControllerBase
         return Ok(orders);
     }
 
-    /// <summary>
-    /// Update supply order status (PATCH - partial update)
-    /// 
-    /// Status Transitions:
-    /// - Created → Approved → Ordered (Admin)
-    /// - Ordered → Shipped → Received → Stored (StorageManager)
-    /// - Cancel allowed before Shipped (Admin)
-    /// 
-    /// When status becomes "Stored", inventory is automatically updated.
-    /// Real-time notifications are sent to the other role (Admin ↔ StorageManager)
-    /// </summary>
+    // Update supply order status (PATCH - partial update)
     [HttpPatch("{id}/status")]
     [Authorize(Roles = "Admin,StorageManager")]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateStatusDto dto)
@@ -137,9 +112,7 @@ public class SupplyOrderController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Update supply order details (only when status is Created)
-    /// </summary>
+    // Update supply order details (only when status is Created)
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSupplyOrderDto dto)
@@ -175,10 +148,8 @@ public class SupplyOrderController : ControllerBase
         }
     }
 
-    /// <summary>
     /// Delete a supply order (Admin only)
     /// Only allowed for Stored or Cancelled orders
-    /// </summary>
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
@@ -199,10 +170,6 @@ public class SupplyOrderController : ControllerBase
     }
 }
 
-/// <summary>
-/// DTO for status update request
-/// Uses string to allow flexible parsing from frontend
-/// </summary>
 public class UpdateStatusDto
 {
     public string Status { get; set; } = string.Empty;

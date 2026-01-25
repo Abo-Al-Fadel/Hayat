@@ -15,7 +15,8 @@ public class NotificationManagerService : INotificationManagerService
         bool unreadOnly,
         int take)
     {
-        var query = _context.Notifications.AsQueryable();
+        // AsNoTracking for read-only listing (better performance)
+        var query = _context.Notifications.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(role))
             query = query.Where(n => n.TargetRole == role);

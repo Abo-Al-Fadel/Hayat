@@ -3,14 +3,6 @@ using Backend.Services;
 using Hayaa.Backend.Models;
 using Microsoft.AspNetCore.SignalR;
 
-/// <summary>
-/// Service for sending real-time notifications via SignalR
-/// 
-/// Notification Flow:
-/// - Medicine changes: Admin ↔ Pharmacist (bidirectional)
-/// - Supply Orders: Admin → StorageManager (creation), StorageManager → Admin (status changes)
-/// - Orders: Pharmacist → Admin (new orders)
-/// </summary>
 public class NotificationService : INotificationService
 {
     private readonly PharmacyDbContext _context;
@@ -127,28 +119,34 @@ public class NotificationService : INotificationService
                           });
     }
 
-    /// <summary>
-    /// DEPRECATED: Admin no longer receives sale notifications.
-    /// This method is kept for backwards compatibility but does nothing.
-    /// Admin receives ONLY: LowStockAlert, SupplyOrderStatusChanged
-    /// Admin receives SILENT: MedicineStockUpdated (no notification, just data sync)
-    /// </summary>
+    public async Task NotifyCategoryChangeAsync(NotificationAction action, Category category)
+    {
+        var payload = new
+        {
+            type = "category",
+            id = category.Id,
+            name = category.Name,
+            action = action.ToString().ToLower(),
+            timestamp = DateTime.UtcNow
+        };
+
+        _logger.LogInformation("[SignalR] Broadcasting CategoryChanged to all roles: {Action} {Category}", 
+            action.ToString().ToLower(), category.Name);
+
+        // Broadcast to all roles - categories are shared data
+        await _hub.Clients.Group("Admin").SendAsync("CategoryChanged", payload);
+        await _hub.Clients.Group("Pharmacist").SendAsync("CategoryChanged", payload);
+        await _hub.Clients.Group("StorageManager").SendAsync("CategoryChanged", payload);
+    }
+
     public async Task NotifyOrderCreatedAsync(Order order)
     {
-        // INTENTIONALLY EMPTY - Admin should NOT receive sale notifications
-        // Admin only cares about:
-        // 1. Low stock alerts (when stock drops below threshold)
-        // 2. Supply order status changes (from StorageManager)
-        // 3. Silent stock updates (for real-time product list sync)
+
         _logger.LogInformation("[SignalR] OrderCreated SUPPRESSED for Admin - sale notifications disabled");
         _logger.LogInformation("[SignalR] Order ID: {OrderId}, Total: {Total}", order.Id, order.TotalPrice);
         await Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Notify Storage Manager when Admin creates a new supply order
-    /// This triggers notification bell in Storage Manager dashboard
-    /// </summary>
     public async Task NotifySupplyOrderCreatedAsync(SupplyOrder supplyOrder)
     {
         var itemCount = supplyOrder.Items?.Count ?? 0;
@@ -184,14 +182,10 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        // FIX: Send ONLY ONE event - ReceiveNotification (removes duplicate)
         await _hub.Clients.Group("StorageManager")
                           .SendAsync("ReceiveNotification", payload);
     }
 
-    /// <summary>
-    /// Notify about supply order status changes
-    /// </summary>
     public async Task NotifySupplyOrderStatusChangedAsync(SupplyOrder supplyOrder, SupplyOrderStatusEnum oldStatus, AppRole actorRole)
     {
         var targetRole = GetTargetRole(actorRole, "SupplyOrder");
@@ -240,9 +234,6 @@ public class NotificationService : INotificationService
                           .SendAsync("ReceiveNotification", payload);
     }
 
-    /// <summary>
-    /// INVENTORY UPDATE - Broadcasts to Admin and StorageManager ONLY
-    /// </summary>
     public async Task BroadcastStockUpdateAsync(SupplyOrder supplyOrder, List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)> stockChanges)
     {
         _logger.LogInformation("[SignalR] Broadcasting StockUpdated: Order {Id}, {Count} items", supplyOrder.Id, stockChanges.Count);
@@ -279,7 +270,6 @@ public class NotificationService : INotificationService
             }).ToList()
         };
 
-        // Send to Admin and StorageManager only
         var roles = new[] { "Admin", "StorageManager" };
         foreach (var role in roles)
         {
@@ -287,15 +277,6 @@ public class NotificationService : INotificationService
         }
     }
 
-    /// <summary>
-    /// LOW STOCK ALERT - Notifies Admin ONLY when medicine quantity drops to or below threshold
-    /// 
-    /// Business Rules:
-    /// - Triggered ONLY after Pharmacist sale (stock deduction)
-    /// - Fires ONLY on transition: previousQty > threshold AND newQty <= threshold
-    /// - Does NOT re-fire if already below threshold
-    /// - Admin ONLY - Pharmacist does not need to know
-    /// </summary>
     public async Task NotifyLowStockAlertAsync(Medicine medicine, int previousQuantity, int soldQuantity)
     {
         // Only alert on transition INTO low stock state
@@ -347,9 +328,7 @@ public class NotificationService : INotificationService
         await _hub.Clients.Group("Admin").SendAsync("LowStockAlert", payload);
     }
 
-    /// <summary>
-    /// SILENT STOCK UPDATE - Admin only for real-time display sync
-    /// </summary>
+    // SILENT STOCK UPDATE - Admin only for real-time display sync
     public async Task NotifyMedicineStockUpdatedAsync(int medicineId, string medicineName, int newQuantity, int soldQuantity)
     {
         _logger.LogInformation("[SignalR] MedicineStockUpdated: {Name}, Qty: {Qty}", medicineName, newQuantity);
@@ -367,9 +346,7 @@ public class NotificationService : INotificationService
         await _hub.Clients.Group("Admin").SendAsync("MedicineStockUpdated", payload);
     }
 
-    /// <summary>
-    /// INVENTORY STOCK INCREASED - Notifies Pharmacist and Admin when supply order is STORED
-    /// </summary>
+    // INVENTORY STOCK INCREASED - Notifies Pharmacist and Admin when supply order is STORED
     public async Task NotifyInventoryStockIncreasedAsync(
         SupplyOrder supplyOrder, 
         List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)> stockChanges)

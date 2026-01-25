@@ -15,6 +15,11 @@ export interface CreateUserDto {
   role: string;
 }
 
+export interface UpdateUserDto {
+  userName: string;
+  email: string;
+}
+
 // GET all users
 export const getUsers = async (): Promise<User[]> => {
   const response = await api.get("/api/Users");
@@ -24,6 +29,12 @@ export const getUsers = async (): Promise<User[]> => {
 // CREATE user
 export const createUser = async (user: CreateUserDto): Promise<User> => {
   const response = await api.post("/api/Users/create", user);
+  return response.data;
+};
+
+// UPDATE user profile (name and email)
+export const updateUser = async (userId: string, data: UpdateUserDto): Promise<User> => {
+  const response = await api.put(`/api/Users/${userId}`, data);
   return response.data;
 };
 

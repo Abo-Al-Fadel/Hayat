@@ -59,8 +59,8 @@ import {
   markAllNotificationsRead,
   type Notification,
 } from "../Services/NotificationService";
-import { getUsers, createUser, deleteUser, updateUserRole, type User, type CreateUserDto } from "../Services/UserService";
-import { getSuppliers, createSupplier, deleteSupplier, type Supplier } from "../Services/SupplierService";
+import { getUsers, createUser, updateUser, deleteUser, updateUserRole, type User, type CreateUserDto, type UpdateUserDto } from "../Services/UserService";
+import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, type Supplier, type UpdateSupplierDto } from "../Services/SupplierService";
 import { 
   getSupplyStocks, 
   createSupplyStock, 
@@ -184,6 +184,14 @@ export default function AdminDashboard() {
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null); // userId being updated
 
   // ──────────────────────────────────────────────────────────────────────────
+  // User Edit Modal State (for name/email editing)
+  // ──────────────────────────────────────────────────────────────────────────
+  const [editUserTarget, setEditUserTarget] = useState<User | null>(null);
+  const [editUserForm, setEditUserForm] = useState<UpdateUserDto>({ userName: "", email: "" });
+  const [editUserErrors, setEditUserErrors] = useState<{ userName?: string; email?: string }>({});
+  const [editUserSaving, setEditUserSaving] = useState(false);
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Current Admin ID - extracted from JWT for self-protection
   // Admin cannot delete or demote themselves
   // ──────────────────────────────────────────────────────────────────────────
@@ -228,10 +236,11 @@ export default function AdminDashboard() {
     createProduct,
     removeProduct,
     updateProductImage,
+    updateProductName,
   } = useProducts();
 
   // Categories - includes CRUD operations
-  const { categories, addCategory, editCategory, removeCategory } = useCategories();
+  const { categories, addCategory, editCategory, removeCategory, handleCategoryChanged } = useCategories();
 
   // Orders - must be before SignalR so reloadOrders is available
   const {
@@ -307,7 +316,13 @@ export default function AdminDashboard() {
     MedicineCreated: () => reloadProducts(),
     MedicineUpdated: () => reloadProducts(),
     MedicineDeleted: () => reloadProducts(),
-  }), [reloadProducts, fetchNotifications, updateLocalProduct]);
+    
+    // Category real-time sync
+    CategoryChanged: (payload: any) => {
+      console.log("[Admin] CategoryChanged received:", payload);
+      handleCategoryChanged(payload);
+    },
+  }), [reloadProducts, fetchNotifications, updateLocalProduct, handleCategoryChanged]);
   
   const { invoke } = useSignalR("/hubs/notifications", signalRHandlers);
 
@@ -512,6 +527,28 @@ export default function AdminDashboard() {
     [products, updateProductImage, broadcast]
   );
 
+  const handleNameChange = useCallback(
+    async (id: number, newName: string) => {
+      const p = products.find((x) => x.id === id);
+      if (!p) return;
+      try {
+        await updateProductName(id, newName);
+        toast.success(`Name updated to "${newName}"`);
+        broadcast("updated", { id, name: newName });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to update name";
+        // Handle duplicate name error (409 Conflict)
+        if (message.includes("already exists")) {
+          toast.error("A medicine with this name already exists");
+        } else {
+          toast.error(message);
+        }
+        throw err; // Re-throw to keep edit mode open
+      }
+    },
+    [products, updateProductName, broadcast]
+  );
+
   const handleToggleHidden = useCallback(
     async (id: number) => {
       const p = products.find((x) => x.id === id);
@@ -699,12 +736,84 @@ export default function AdminDashboard() {
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────
+  // User Edit Modal handlers (for name/email editing)
+  // ──────────────────────────────────────────────────────────────────────────
+  
+  // Validation helpers
+  const isValidEmail = (email: string): boolean => {
+    if (!email.trim()) return false;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  const openEditUserModal = useCallback((user: User) => {
+    setEditUserTarget(user);
+    setEditUserForm({
+      userName: user.userName,
+      email: user.email || "",
+    });
+    setEditUserErrors({});
+  }, []);
+
+  const closeEditUserModal = useCallback(() => {
+    setEditUserTarget(null);
+    setEditUserForm({ userName: "", email: "" });
+    setEditUserErrors({});
+  }, []);
+
+  const validateEditUserForm = useCallback((): boolean => {
+    const errors: { userName?: string; email?: string } = {};
+    
+    if (!editUserForm.userName.trim()) {
+      errors.userName = "Username is required";
+    } else if (editUserForm.userName.length < 2) {
+      errors.userName = "Username must be at least 2 characters";
+    }
+    
+    if (!editUserForm.email.trim()) {
+      errors.email = "Email is required";
+    } else if (!isValidEmail(editUserForm.email)) {
+      errors.email = "Invalid email format";
+    }
+    
+    setEditUserErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [editUserForm]);
+
+  const handleEditUserSave = useCallback(async () => {
+    if (!editUserTarget || !validateEditUserForm()) return;
+
+    setEditUserSaving(true);
+    try {
+      const updated = await updateUser(editUserTarget.id, {
+        userName: editUserForm.userName.trim(),
+        email: editUserForm.email.trim(),
+      });
+      setUsers((prev) => prev.map((u) => (u.id === editUserTarget.id ? { ...u, ...updated } : u)));
+      toast.success("User updated successfully");
+      closeEditUserModal();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update user";
+      toast.error(message);
+    } finally {
+      setEditUserSaving(false);
+    }
+  }, [editUserTarget, editUserForm, validateEditUserForm, closeEditUserModal]);
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Supplier handlers (for SupplierPanel)
   // ──────────────────────────────────────────────────────────────────────────
   const handleAddSupplier = useCallback(async (newSupplier: Omit<Supplier, "id">) => {
     const created = await createSupplier(newSupplier);
     setSuppliers((prev) => [...prev, created]);
     toast.success("Supplier added successfully");
+  }, []);
+
+  const handleEditSupplier = useCallback(async (id: number, data: UpdateSupplierDto): Promise<Supplier> => {
+    const updated = await updateSupplier(id, data);
+    setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)));
+    toast.success("Supplier updated successfully");
+    return updated;
   }, []);
 
   const handleDeleteSupplier = useCallback(async (supplierId: number) => {
@@ -1253,6 +1362,7 @@ export default function AdminDashboard() {
                       onToggleHidden={handleToggleHidden}
                       onDelete={handleDeleteProduct}
                       onImageChange={handleImageChange}
+                      onNameChange={handleNameChange}
                     />
                   ))}
                 </div>
@@ -1342,6 +1452,7 @@ export default function AdminDashboard() {
                     loading={suppliersLoading}
                     darkMode={darkMode}
                     onAddSupplier={handleAddSupplier}
+                    onEditSupplier={handleEditSupplier}
                     onDeleteSupplier={handleDeleteSupplier}
                   />
                 </div>
@@ -1507,6 +1618,14 @@ export default function AdminDashboard() {
                             <option value="Pharmacist">Pharmacist</option>
                             <option value="StorageManager">Storage Manager</option>
                           </select>
+                          {/* Edit Button - opens edit modal */}
+                          <button
+                            onClick={() => openEditUserModal(user)}
+                            title="Edit user"
+                            className="p-2 rounded-lg transition-colors text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
                           {/* Delete Button - opens custom modal */}
                           {/* DISABLED for current admin (self-protection) */}
                           <button
@@ -1707,6 +1826,167 @@ export default function AdminDashboard() {
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── User Edit Modal ─────────────────────────────────────────────── */}
+      {editUserTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`w-full max-w-md mx-4 rounded-xl shadow-2xl overflow-hidden ${
+            darkMode ? "bg-gray-800" : "bg-white"
+          }`}>
+            {/* Modal Header */}
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <h3 className={`text-lg font-semibold ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+                Edit User
+              </h3>
+              <button
+                onClick={closeEditUserModal}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  darkMode ? "hover:bg-gray-700 text-gray-400" : "hover:bg-gray-100 text-gray-500"
+                }`}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-4 space-y-4">
+              {/* User Info Preview */}
+              <div className={`p-3 rounded-lg flex items-center gap-3 ${
+                darkMode ? "bg-gray-700/50" : "bg-gray-50"
+              }`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                  editUserTarget.role.toLowerCase() === "admin" 
+                    ? "bg-red-100 dark:bg-red-900/30"
+                    : editUserTarget.role.toLowerCase() === "pharmacist"
+                    ? "bg-cyan-100 dark:bg-cyan-900/30"
+                    : "bg-orange-100 dark:bg-orange-900/30"
+                }`}>
+                  <Users className={`h-5 w-5 ${
+                    editUserTarget.role.toLowerCase() === "admin" 
+                      ? "text-red-600 dark:text-red-400"
+                      : editUserTarget.role.toLowerCase() === "pharmacist"
+                      ? "text-cyan-600 dark:text-cyan-400"
+                      : "text-orange-600 dark:text-orange-400"
+                  }`} />
+                </div>
+                <div>
+                  <div className={`text-sm font-medium ${darkMode ? "text-gray-100" : "text-gray-900"}`}>
+                    Editing: {editUserTarget.userName}
+                  </div>
+                  <div className={`text-xs ${
+                    editUserTarget.role.toLowerCase() === "admin" 
+                      ? "text-red-600 dark:text-red-400"
+                      : editUserTarget.role.toLowerCase() === "pharmacist"
+                      ? "text-cyan-600 dark:text-cyan-400"
+                      : "text-orange-600 dark:text-orange-400"
+                  }`}>
+                    {editUserTarget.role}
+                  </div>
+                </div>
+              </div>
+
+              {/* Username Field */}
+              <div>
+                <label className={`block text-sm font-medium mb-1.5 ${
+                  darkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Username <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editUserForm.userName}
+                  onChange={(e) => {
+                    setEditUserForm((prev) => ({ ...prev, userName: e.target.value }));
+                    if (editUserErrors.userName) setEditUserErrors((prev) => ({ ...prev, userName: undefined }));
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    editUserErrors.userName 
+                      ? "border-red-500" 
+                      : darkMode ? "border-gray-600" : "border-gray-300"
+                  } ${
+                    darkMode 
+                      ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
+                      : "bg-white text-gray-900 placeholder-gray-500"
+                  }`}
+                  placeholder="Enter username"
+                />
+                {editUserErrors.userName && (
+                  <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {editUserErrors.userName}
+                  </div>
+                )}
+              </div>
+
+              {/* Email Field */}
+              <div>
+                <label className={`block text-sm font-medium mb-1.5 ${
+                  darkMode ? "text-gray-300" : "text-gray-700"
+                }`}>
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={editUserForm.email}
+                  onChange={(e) => {
+                    setEditUserForm((prev) => ({ ...prev, email: e.target.value }));
+                    if (editUserErrors.email) setEditUserErrors((prev) => ({ ...prev, email: undefined }));
+                  }}
+                  className={`w-full px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
+                    editUserErrors.email 
+                      ? "border-red-500" 
+                      : darkMode ? "border-gray-600" : "border-gray-300"
+                  } ${
+                    darkMode 
+                      ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
+                      : "bg-white text-gray-900 placeholder-gray-500"
+                  }`}
+                  placeholder="Enter email address"
+                />
+                {editUserErrors.email && (
+                  <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {editUserErrors.email}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className={`px-6 py-4 border-t flex gap-3 ${
+              darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+              <button
+                onClick={closeEditUserModal}
+                disabled={editUserSaving}
+                className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors ${
+                  darkMode 
+                    ? "bg-gray-700 hover:bg-gray-600 text-gray-200" 
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-700"
+                } disabled:opacity-50`}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditUserSave}
+                disabled={editUserSaving || !editUserForm.userName.trim() || !editUserForm.email.trim()}
+                className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {editUserSaving ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
             </div>
           </div>
         </div>
