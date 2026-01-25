@@ -75,14 +75,10 @@ const buildImageUrl = (imagePath: string | undefined | null): string => {
   if (!imagePath || imagePath.trim() === "") {
     return DEFAULT_MEDICINE_IMAGE;
   }
-  // Already absolute URL or data URI - use as-is
   if (imagePath.startsWith("http") || imagePath.startsWith("data:")) {
     return imagePath;
   }
-  // Relative path - prefix with API base
-  const fullUrl = `${API_BASE}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
-  console.log("[StorageManager] Image URL built:", fullUrl);
-  return fullUrl;
+  return `${API_BASE}${imagePath.startsWith('/') ? '' : '/'}${imagePath}`;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -612,30 +608,25 @@ export default function StorageManagerDashboard() {
                               <div className="space-y-2">
                                 <h4 className="font-medium text-sm mb-2">Order Items:</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {order.items.map((item, idx) => {
-                                    // TEMPORARY DEBUG LOG - verify image URL is coming from backend
-                                    console.log("[StorageManager] Item:", item.medicineName, "| ImageUrl:", item.medicineImageUrl, "| Built URL:", buildImageUrl(item.medicineImageUrl));
-                                    return (
+                                  {order.items.map((item, idx) => (
                                     <div 
                                       key={idx}
                                       className={`p-3 rounded-lg ${darkMode ? "bg-gray-700" : "bg-white"} border ${
                                         darkMode ? "border-gray-600" : "border-gray-200"
                                       } flex items-center gap-3`}
                                     >
-                                      {/* Medicine Image - Fixed size with fallback */}
+                                      {/* Medicine image */}
                                       <div className="flex-shrink-0 w-14 h-14">
                                         <img
                                           src={buildImageUrl(item.medicineImageUrl)}
                                           alt={item.medicineName}
                                           className="w-full h-full object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700"
                                           onError={(e) => {
-                                            console.log("[StorageManager] Image load error for:", item.medicineName);
                                             (e.target as HTMLImageElement).src = DEFAULT_MEDICINE_IMAGE;
                                           }}
                                         />
                                       </div>
-                                      
-                                      {/* Medicine Details */}
+                                      {/* Medicine details */}
                                       <div className="flex-1 min-w-0">
                                         <p className="font-medium truncate">{item.medicineName}</p>
                                         <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
@@ -646,7 +637,7 @@ export default function StorageManagerDashboard() {
                                         </p>
                                       </div>
                                     </div>
-                                  )})}
+                                  ))}
                                 </div>
                                 
                                 {/* Status Timeline */}

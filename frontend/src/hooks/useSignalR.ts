@@ -62,14 +62,17 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
   }, []);
 
   useEffect(() => {
+    // Capture ref values at effect start for cleanup
+    const componentId = componentIdRef.current;
+    
     // Prevent double initialization in React StrictMode
     if (isInitializedRef.current) {
-      console.log(`[SignalR] Component ${componentIdRef.current} already initialized, skipping`);
+      console.log(`[SignalR] Component ${componentId} already initialized, skipping`);
       return;
     }
     isInitializedRef.current = true;
     
-    console.log(`[SignalR] Component ${componentIdRef.current} initializing for ${hubPath}`);
+    console.log(`[SignalR] Component ${componentId} initializing for ${hubPath}`);
 
     const initConnection = async () => {
       const token = getToken();
@@ -159,16 +162,14 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
 
     initConnection();
 
-    // Cleanup: decrement refCount but DON'T stop connection
-    // Connection persists for better UX; use stopAllSignalRConnections() on logout
+    // Cleanup: decrement refCount, keep connection alive
     return () => {
-      console.log(`[SignalR] Component ${componentIdRef.current} cleanup`);
+      console.log(`[SignalR] Component ${componentId} cleanup`);
       const store = connectionStore.get(hubPath);
       if (store) {
         store.refCount = Math.max(0, store.refCount - 1);
         console.log(`[SignalR] RefCount for ${hubPath}: ${store.refCount}`);
       }
-      // Reset for potential re-mount (StrictMode)
       isInitializedRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
