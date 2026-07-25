@@ -2,6 +2,7 @@ using Backend.Services;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using AutoMapper;
 using System.Text.Json;
 
 
@@ -30,7 +31,7 @@ public static class ServiceCollectionExtensions
             });
         
         services.AddFluentValidationAutoValidation();
-        services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
+        services.AddAutoMapper(cfg => cfg.AddMaps(typeof(Program).Assembly));
         services.AddValidatorsFromAssembly(typeof(CreateMedicineDto).Assembly);
         return services;
     }

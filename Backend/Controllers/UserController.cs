@@ -20,9 +20,17 @@ public class UsersController : ControllerBase
     [HttpPost("create")]
     public async Task<IActionResult> Create(CreateUserDto dto)
     {
-        var user = await _service.CreateUserAsync(dto);
-        _logger.LogInformation("[Security] User created: {UserName}, Role: {Role}", dto.UserName, dto.Role);
-        return Ok(user);
+        try
+        {
+            var user = await _service.CreateUserAsync(dto);
+            _logger.LogInformation("[Security] User created: {UserName}, Role: {Role}", dto.UserName, dto.Role);
+            return Ok(user);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Security] User creation failed for {UserName}", dto.UserName);
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpDelete("{userId}")]

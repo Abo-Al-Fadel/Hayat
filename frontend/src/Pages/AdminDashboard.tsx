@@ -629,6 +629,15 @@ export default function AdminDashboard() {
       toast.error("Username is required");
       return;
     }
+    if (!newUserForm.email?.trim()) {
+      toast.error("Email is required");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newUserForm.email)) {
+      toast.error("Invalid email format");
+      return;
+    }
     if (!newUserForm.password.trim() || newUserForm.password.length < 6) {
       toast.error("Password must be at least 6 characters");
       return;
@@ -638,8 +647,8 @@ export default function AdminDashboard() {
       toast.error("Username already exists");
       return;
     }
-    // Check for duplicate email if provided
-    if (newUserForm.email && users.some((u) => u.email?.toLowerCase() === newUserForm.email?.toLowerCase())) {
+    // Check for duplicate email
+    if (users.some((u) => u.email?.toLowerCase() === newUserForm.email?.toLowerCase())) {
       toast.error("Email already exists");
       return;
     }
@@ -651,9 +660,18 @@ export default function AdminDashboard() {
       setNewUserForm({ userName: "", password: "", email: "", role: "Pharmacist" });
       setShowAddUserForm(false);
       toast.success("User created successfully");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create user";
-      toast.error(message);
+    } catch (err: any) {
+      let errorMessage = "Failed to create user";
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error; // Custom backend error (e.g. Identity password rules)
+      } else if (err.response?.data?.errors) {
+        // Model validation errors (e.g. [Required] or [EmailAddress])
+        const firstKey = Object.keys(err.response.data.errors)[0];
+        errorMessage = err.response.data.errors[firstKey][0];
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+      toast.error(errorMessage);
     } finally {
       setUserSaving(false);
     }
@@ -1500,14 +1518,14 @@ export default function AdminDashboard() {
                       />
                       <input
                         type="password"
-                        placeholder="Password * (min 6 chars)"
+                        placeholder="Password * (min 6 chars, A-z, 0-9, special char)"
                         value={newUserForm.password}
                         onChange={(e) => setNewUserForm((prev) => ({ ...prev, password: e.target.value }))}
                         className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
                       <input
                         type="email"
-                        placeholder="Email"
+                        placeholder="Email *"
                         value={newUserForm.email}
                         onChange={(e) => setNewUserForm((prev) => ({ ...prev, email: e.target.value }))}
                         className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
