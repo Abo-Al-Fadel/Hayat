@@ -35,6 +35,13 @@ frontend/blob-report/
 frontend/.playwright/
 
 # ========================
+# Vite
+# ========================
+frontend/.vite/
+frontend/node_modules/.vite/
+*.local
+
+# ========================
 # Environment files
 # ========================
 .env

@@ -1,13 +1,25 @@
-// jest-dom adds custom jest matchers for asserting on DOM nodes.
-// allows you to do things like:
-// expect(element).toHaveTextContent(/react/i)
-// learn more: https://github.com/testing-library/jest-dom
-import '@testing-library/jest-dom';
-import { TextEncoder, TextDecoder } from 'util';
+// Vitest setup. Runs before every test file.
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
 
-// react-router v7 needs TextEncoder/TextDecoder, which the jsdom bundled with
-// react-scripts 5 does not provide. Node supplies them via `util`.
-if (typeof global.TextEncoder === 'undefined') {
-  global.TextEncoder = TextEncoder as typeof global.TextEncoder;
-  global.TextDecoder = TextDecoder as typeof global.TextDecoder;
+// React Testing Library does not auto-clean under Vitest's globals.
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
+
+// jsdom does not implement matchMedia, which the pre-paint theme script and some
+// components rely on.
+if (!window.matchMedia) {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
 }

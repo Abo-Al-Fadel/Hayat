@@ -1,6 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
+import { describe, test, expect } from "vitest";
 import App from "./App";
 
 // App is a layout shell: it mounts the toast host and renders whatever the
@@ -16,11 +17,13 @@ const renderAppWithChild = (child: React.ReactNode) =>
     </MemoryRouter>
   );
 
-test("renders the routed child through its outlet", () => {
-  renderAppWithChild(<p>child page</p>);
-  expect(screen.getByText("child page")).toBeInTheDocument();
-});
+describe("App shell", () => {
+  test("renders the routed child through its outlet", () => {
+    renderAppWithChild(<p>child page</p>);
+    expect(screen.getByText("child page")).toBeInTheDocument();
+  });
 
-test("mounts without crashing when the outlet is empty", () => {
-  expect(() => renderAppWithChild(null)).not.toThrow();
+  test("mounts without crashing when the outlet is empty", () => {
+    expect(() => renderAppWithChild(null)).not.toThrow();
+  });
 });

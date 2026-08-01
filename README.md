@@ -16,7 +16,8 @@ supplier/supply orders, point-of-sale, financial reporting, and real-time notifi
 - **API docs:** Swagger / OpenAPI (Development only)
 
 ### Frontend
-- **Framework:** React 19 + TypeScript
+- **Build tool:** Vite 8 (replaced the end-of-life Create React App toolchain)
+- **Framework:** React 19 + TypeScript 5
 - **UI:** Tailwind CSS, MUI, Lucide React
 - **HTTP / real-time:** Axios, `@microsoft/signalr`
 - **Routing:** React Router v7
@@ -24,7 +25,7 @@ supplier/supply orders, point-of-sale, financial reporting, and real-time notifi
 
 ### Testing
 - **Backend:** xUnit + Moq + EF Core InMemory
-- **Frontend:** Jest + React Testing Library
+- **Frontend:** Vitest + React Testing Library
 - **End-to-end:** Playwright (Chromium)
 
 ---
@@ -106,6 +107,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 | `JwtSettings:Key` | ✅ | JWT signing key (32+ chars). **Rotate if ever exposed.** |
 | `JwtSettings:Issuer` | ✅ | Expected token issuer |
 | `JwtSettings:Audience` | ✅ | Expected token audience |
+| `JwtSettings:ExpiryHours` | Optional | Token lifetime, default **8** (a working shift), clamped to 1-24. The old 2-hour default expired mid-shift. |
 | `Cors:AllowedOrigins` | ✅ outside Development | Array of allowed frontend origins. The app **refuses to start** in non-Development without it. Never `*` — SignalR requires credentials. |
 | `BootstrapAdmin:UserName` / `:Email` / `:Password` | Optional | Creates the first Admin **only** on an empty database. Omit once an Admin exists. |
 | `Pricing:*` | Optional | Markup tiers, dispensing fee (see below) |
@@ -190,8 +192,12 @@ dotnet test Hayat.sln
 # Frontend unit tests
 cd frontend && npm test
 
+# Typecheck / lint
+cd frontend && npm run typecheck && npm run lint
+
 # End-to-end (needs API on :5057 and SPA on :3000)
-cd frontend && npx playwright test
+cd frontend && npm run build && npm run preview   # serves the build on :3000
+cd frontend && npm run e2e
 ```
 
 Playwright creates its own role accounts via the API. On a fresh database, start the API with
@@ -226,6 +232,9 @@ dotnet publish Backend/Backend.csproj -c Release -o ./publish
 cd frontend && npm ci && npm run build   # output in frontend/build
 ```
 
+`npm run build` runs `tsc --noEmit` first, so a type error fails the build rather than
+shipping.
+
 ---
 
 ## 🔐 Security notes
@@ -238,3 +247,16 @@ cd frontend && npm ci && npm run build   # output in frontend/build
   under a generated GUID filename.
 - JWTs are held in `localStorage`, which is readable by any successful XSS. Moving to
   httpOnly cookies would be an improvement if the threat model warrants it.
+- Sessions end cleanly: the client refuses to send an expired token, any 401 clears the
+  session, and the user is redirected to the login page with an explanation.
+
+### Known advisory with no available fix
+
+`npm audit` reports one advisory against `react-router` (*RSC Mode CSRF Bypass*,
+affecting `>=7.12.0 <8.3.0`). **No fixed version exists** - 7.18.2 is the latest
+published release and 8.3.0 is not out. It does not apply here: this is a client-only
+SPA using `createBrowserRouter` with no RSC, server actions, loaders or SSR.
+
+Do **not** take `npm audit`'s advice to "fix" it by downgrading to 7.11.0 - that
+version carries 14 advisories, including XSS and an RCE-class deserialization issue,
+several of which *do* apply to this app. 7.18.2 is the safest available version.
