@@ -28,8 +28,10 @@ public class CategoriesController : ControllerBase
         return Ok("Category deleted");
     }
 
+    // Readable by every signed-in role (all three dashboards filter by category),
+    // but not by anonymous callers - the catalogue structure is not public data.
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,Pharmacist,StorageManager")]
     public async Task<IActionResult> GetAll()
         => Ok(await _service.GetAllAsync());
 }

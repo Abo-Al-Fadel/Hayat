@@ -9,15 +9,25 @@ namespace Backend.Controllers
     [Route("api/[controller]")]
     public class AuthController : ControllerBase
     {
+        // Single message for every failure mode so the response cannot be used to
+        // discover which usernames exist.
+        private const string InvalidCredentialsMessage = "Invalid username or password.";
+
         private readonly UserManager<AppUser> _userManager;
         private readonly SignInManager<AppUser> _signInManager;
         private readonly ITokenService _tokenService;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, ITokenService tokenService)
+        public AuthController(
+            UserManager<AppUser> userManager,
+            SignInManager<AppUser> signInManager,
+            ITokenService tokenService,
+            ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _signInManager = signInManager;
             _tokenService = tokenService;
+            _logger = logger;
         }
 
         [HttpPost("login")]
@@ -29,16 +39,31 @@ namespace Backend.Controllers
 
             var user = await _userManager.FindByNameAsync(loginDto.UserName);
             if (user == null)
-                return Unauthorized("Invalid username");
+            {
+                _logger.LogWarning("[Auth] Failed login for unknown user '{UserName}'", loginDto.UserName);
+                return Unauthorized(InvalidCredentialsMessage);
+            }
 
-            var passwordValid = await _userManager.CheckPasswordAsync(user, loginDto.Password);
-            if (!passwordValid)
-                return Unauthorized("Invalid password");
+            // Goes through SignInManager rather than CheckPasswordAsync so that failed
+            // attempts count towards Identity's lockout and brute force is throttled.
+            var signInResult = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
+
+            if (signInResult.IsLockedOut)
+            {
+                _logger.LogWarning("[Auth] Login blocked - account '{UserName}' is locked out", user.UserName);
+                return Unauthorized(InvalidCredentialsMessage);
+            }
+
+            if (!signInResult.Succeeded)
+            {
+                _logger.LogWarning("[Auth] Failed login for '{UserName}'", user.UserName);
+                return Unauthorized(InvalidCredentialsMessage);
+            }
 
             var roles = await _userManager.GetRolesAsync(user);
             var token = _tokenService.CreateToken(user, roles);
 
-            Console.WriteLine($"[AUTH] Login success — user: {user.UserName} — role: {roles.FirstOrDefault()} — token issued (stateless JWT)");
+            _logger.LogInformation("[Auth] Login success for '{UserName}' with role '{Role}'", user.UserName, roles.FirstOrDefault());
 
             return Ok(new LoginResponseDto
             {

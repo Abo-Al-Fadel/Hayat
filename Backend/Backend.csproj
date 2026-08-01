@@ -4,6 +4,9 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Local dev secrets (JWT key, connection string) live outside the repo.
+         See README "Configuration" for the required keys. -->
+    <UserSecretsId>hayat-pharmacy-backend</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -66,9 +66,10 @@ export const markNotificationsRead = async (ids: number[]): Promise<void> => {
   await api.post("/api/Notifications/markread", ids);
 };
 
-// MARK all notifications as read for a role
-export const markAllNotificationsRead = async (role: string): Promise<void> => {
-  await api.post(`/api/Notifications/markallread?role=${role}`);
+// MARK all notifications as read for the signed-in user's own role.
+// The backend derives the role from the JWT and ignores any role passed in.
+export const markAllNotificationsRead = async (): Promise<void> => {
+  await api.post("/api/Notifications/markallread");
 };
 
 // DELETE notification

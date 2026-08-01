@@ -102,6 +102,11 @@ public class SupplyOrderController : ControllerBase
             var updated = await _service.UpdateStatusAsync(id, newStatus, actorRole);
             return Ok(updated);
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            // This stage of the workflow belongs to the other role.
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message });
+        }
         catch (InvalidOperationException ex)
         {
             return BadRequest(ex.Message);

@@ -283,7 +283,7 @@ export default function StorageManagerDashboard() {
 
   const handleMarkAllRead = async () => {
     try {
-      await markAllNotificationsRead("StorageManager");
+      await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (err) {
@@ -374,7 +374,7 @@ export default function StorageManagerDashboard() {
           onClick={handleLogoClick}
           title="Go to Homepage"
         >
-          <img src={logo} alt="Hayaa Logo" className="h-10 w-auto" />
+          <img src={logo} alt="Hayat Logo" className="h-10 w-auto" />
           <h2 className={`text-lg font-bold ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
             Storage Manager
           </h2>

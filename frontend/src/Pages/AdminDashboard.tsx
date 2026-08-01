@@ -24,7 +24,7 @@
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle, Bell } from "lucide-react";
+import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle, Bell, DollarSign } from "lucide-react";
 import toast from "react-hot-toast";
 
 // Hooks
@@ -48,6 +48,7 @@ import {
   InvoiceModal,
   SupplyStockPanel,
   SupplierPanel,
+  FinancePanel,
   type NavItem,
 } from "../Components/dashboard";
 
@@ -78,9 +79,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "orders", label: "Orders", icon: <FileText className="h-5 w-5" /> },
   { id: "stocks", label: "Stocks", icon: <Truck className="h-5 w-5" /> },
   { id: "users", label: "Users", icon: <Users className="h-5 w-5" /> },
+  { id: "finance", label: "Finance", icon: <DollarSign className="h-5 w-5" /> },
 ];
 
-type PageType = "products" | "orders" | "stocks" | "users";
+type PageType = "products" | "orders" | "stocks" | "users" | "finance";
 
 // LocalStorage key for section persistence
 const ACTIVE_SECTION_STORAGE_KEY = "adminDashboardActiveSection";
@@ -319,7 +321,6 @@ export default function AdminDashboard() {
     
     // Category real-time sync
     CategoryChanged: (payload: any) => {
-      console.log("[Admin] CategoryChanged received:", payload);
       handleCategoryChanged(payload);
     },
   }), [reloadProducts, fetchNotifications, updateLocalProduct, handleCategoryChanged]);
@@ -363,7 +364,7 @@ export default function AdminDashboard() {
 
   const handleMarkAllRead = useCallback(async () => {
     try {
-      await markAllNotificationsRead("Admin");
+      await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
     } catch (err) {
@@ -1082,6 +1083,7 @@ export default function AdminDashboard() {
       case "orders": return "Orders";
       case "stocks": return "Stocks & Suppliers";
       case "users": return "Users Management";
+      case "finance": return "Finance & Profit";
       default: return "Dashboard";
     }
   };
@@ -1670,6 +1672,9 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+
+          {/* ─── Finance Page ──────────────────────────────────────────────── */}
+          {activePage === "finance" && <FinancePanel />}
         </main>
       </div>
 

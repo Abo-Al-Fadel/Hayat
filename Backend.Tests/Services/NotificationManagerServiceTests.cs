@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace Backend.Tests.Services;
@@ -37,8 +37,8 @@ public class NotificationManagerServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         context.Notifications.AddRange(
-            new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "Admin msg", Action = NotificationAction.Created },
-            new Hayaa.Backend.Models.Notification { TargetRole = "Pharmacist", Message = "Pharmacist msg", Action = NotificationAction.Updated }
+            new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "Admin msg", Action = NotificationAction.Created },
+            new Hayat.Backend.Models.Notification { TargetRole = "Pharmacist", Message = "Pharmacist msg", Action = NotificationAction.Updated }
         );
         await context.SaveChangesAsync();
         var service = new NotificationManagerService(context);
@@ -60,8 +60,8 @@ public class NotificationManagerServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         context.Notifications.AddRange(
-            new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "Read", IsRead = true, Action = NotificationAction.Created },
-            new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "Unread", IsRead = false, Action = NotificationAction.Updated }
+            new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "Read", IsRead = true, Action = NotificationAction.Created },
+            new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "Unread", IsRead = false, Action = NotificationAction.Updated }
         );
         await context.SaveChangesAsync();
         var service = new NotificationManagerService(context);
@@ -83,9 +83,9 @@ public class NotificationManagerServiceTests
         using var context = CreateInMemoryContext();
         for (int i = 0; i < 10; i++)
         {
-            context.Notifications.Add(new Hayaa.Backend.Models.Notification 
-            { 
-                TargetRole = "Admin", 
+            context.Notifications.Add(new Hayat.Backend.Models.Notification
+            {
+                TargetRole = "Admin",
                 Message = $"Msg {i}",
                 Action = NotificationAction.Created
             });
@@ -105,14 +105,14 @@ public class NotificationManagerServiceTests
     {
         // Arrange
         using var context = CreateInMemoryContext();
-        var notif1 = new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "Msg1", IsRead = false, Action = NotificationAction.Created };
-        var notif2 = new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "Msg2", IsRead = false, Action = NotificationAction.Updated };
+        var notif1 = new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "Msg1", IsRead = false, Action = NotificationAction.Created };
+        var notif2 = new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "Msg2", IsRead = false, Action = NotificationAction.Updated };
         context.Notifications.AddRange(notif1, notif2);
         await context.SaveChangesAsync();
         var service = new NotificationManagerService(context);
 
         // Act
-        var success = await service.MarkReadAsync(new[] { notif1.Id, notif2.Id });
+        var success = await service.MarkReadAsync(new[] { notif1.Id, notif2.Id }, "Admin");
 
         // Assert
         Assert.True(success);
@@ -128,7 +128,7 @@ public class NotificationManagerServiceTests
         var service = new NotificationManagerService(context);
 
         // Act
-        var success = await service.MarkReadAsync(new[] { 999, 1000 });
+        var success = await service.MarkReadAsync(new[] { 999, 1000 }, "Admin");
 
         // Assert
         Assert.False(success);
@@ -140,9 +140,9 @@ public class NotificationManagerServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         context.Notifications.AddRange(
-            new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "A1", IsRead = false, Action = NotificationAction.Created },
-            new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "A2", IsRead = false, Action = NotificationAction.Updated },
-            new Hayaa.Backend.Models.Notification { TargetRole = "Pharmacist", Message = "P1", IsRead = false, Action = NotificationAction.Deleted }
+            new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "A1", IsRead = false, Action = NotificationAction.Created },
+            new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "A2", IsRead = false, Action = NotificationAction.Updated },
+            new Hayat.Backend.Models.Notification { TargetRole = "Pharmacist", Message = "P1", IsRead = false, Action = NotificationAction.Deleted }
         );
         await context.SaveChangesAsync();
         var service = new NotificationManagerService(context);
@@ -163,13 +163,13 @@ public class NotificationManagerServiceTests
     {
         // Arrange
         using var context = CreateInMemoryContext();
-        var notif = new Hayaa.Backend.Models.Notification { TargetRole = "Admin", Message = "ToDelete", Action = NotificationAction.Created };
+        var notif = new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "ToDelete", Action = NotificationAction.Created };
         context.Notifications.Add(notif);
         await context.SaveChangesAsync();
         var service = new NotificationManagerService(context);
 
         // Act
-        var success = await service.DeleteAsync(notif.Id);
+        var success = await service.DeleteAsync(notif.Id, "Admin");
 
         // Assert
         Assert.True(success);
@@ -185,9 +185,98 @@ public class NotificationManagerServiceTests
         var service = new NotificationManagerService(context);
 
         // Act
-        var success = await service.DeleteAsync(999);
+        var success = await service.DeleteAsync(999, "Admin");
 
         // Assert
         Assert.False(success);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Cross-role scoping: mutations must only touch the caller's own role.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task MarkReadAsync_DoesNotTouchOtherRolesNotifications()
+    {
+        // Arrange
+        using var context = CreateInMemoryContext();
+        var adminNotif = new Hayat.Backend.Models.Notification
+        {
+            TargetRole = "Admin",
+            Message = "Admin only",
+            IsRead = false,
+            Action = NotificationAction.Created
+        };
+        context.Notifications.Add(adminNotif);
+        await context.SaveChangesAsync();
+        var service = new NotificationManagerService(context);
+
+        // Act - a StorageManager tries to mark an Admin notification read
+        var success = await service.MarkReadAsync(new[] { adminNotif.Id }, "StorageManager");
+
+        // Assert
+        Assert.False(success);
+        Assert.False((await context.Notifications.FindAsync(adminNotif.Id))!.IsRead);
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_OnlyMarksCallersOwnRole_WhenIdsSpanRoles()
+    {
+        // Arrange
+        using var context = CreateInMemoryContext();
+        var adminNotif = new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "A", IsRead = false, Action = NotificationAction.Created };
+        var pharmNotif = new Hayat.Backend.Models.Notification { TargetRole = "Pharmacist", Message = "P", IsRead = false, Action = NotificationAction.Created };
+        context.Notifications.AddRange(adminNotif, pharmNotif);
+        await context.SaveChangesAsync();
+        var service = new NotificationManagerService(context);
+
+        // Act
+        var success = await service.MarkReadAsync(new[] { adminNotif.Id, pharmNotif.Id }, "Pharmacist");
+
+        // Assert
+        Assert.True(success);
+        Assert.False((await context.Notifications.FindAsync(adminNotif.Id))!.IsRead);
+        Assert.True((await context.Notifications.FindAsync(pharmNotif.Id))!.IsRead);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DoesNotDeleteOtherRolesNotification()
+    {
+        // Arrange
+        using var context = CreateInMemoryContext();
+        var adminNotif = new Hayat.Backend.Models.Notification
+        {
+            TargetRole = "Admin",
+            Message = "Admin only",
+            Action = NotificationAction.Created
+        };
+        context.Notifications.Add(adminNotif);
+        await context.SaveChangesAsync();
+        var service = new NotificationManagerService(context);
+
+        // Act
+        var success = await service.DeleteAsync(adminNotif.Id, "Pharmacist");
+
+        // Assert
+        Assert.False(success);
+        Assert.NotNull(await context.Notifications.FindAsync(adminNotif.Id));
+    }
+
+    [Fact]
+    public async Task MarkReadAsync_ReturnsFalse_WhenCallerRoleMissing()
+    {
+        // Arrange
+        using var context = CreateInMemoryContext();
+        var notif = new Hayat.Backend.Models.Notification { TargetRole = "Admin", Message = "A", IsRead = false, Action = NotificationAction.Created };
+        context.Notifications.Add(notif);
+        await context.SaveChangesAsync();
+        var service = new NotificationManagerService(context);
+
+        // Act
+        var success = await service.MarkReadAsync(new[] { notif.Id }, "");
+
+        // Assert
+        Assert.False(success);
+        Assert.False((await context.Notifications.FindAsync(notif.Id))!.IsRead);
     }
 }
