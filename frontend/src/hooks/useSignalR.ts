@@ -17,9 +17,9 @@
  */
 import { useEffect, useRef, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
+import { getValidToken } from "../utils/token";
 
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:5057";
-const TOKEN_KEY = "token";
 
 // SINGLETON connection store - one connection per hub path
 interface ConnectionStore {
@@ -56,9 +56,8 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
     });
   }, [hubPath, handlers]);
 
-  const getToken = useCallback(() => {
-    return localStorage.getItem(TOKEN_KEY) || "";
-  }, []);
+  // Returns "" once the token has expired, so the hub is never handed a dead token.
+  const getToken = useCallback(() => getValidToken() ?? "", []);
 
   useEffect(() => {
     // Prevent double initialization in React StrictMode
@@ -131,9 +130,6 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
 
       connection.onreconnecting((err) => {
         console.warn(`[SignalR] Reconnecting ${hubPath}...`, err);
-      });
-
-      connection.onreconnected((newId) => {
       });
 
       try {

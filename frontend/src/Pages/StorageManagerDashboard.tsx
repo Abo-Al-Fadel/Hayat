@@ -25,8 +25,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
-  Package, Bell, Sun, Moon, ChevronDown, Check, Truck, 
-  Clock, AlertCircle, Search, ChevronLeft, ChevronRight, LogOut 
+  Package, Bell, Sun, Moon, ChevronDown, Check, Truck,
+  Clock, AlertCircle, Search, ChevronLeft, ChevronRight, LogOut, Menu, X
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -55,6 +55,7 @@ import {
 // Components
 import { ConfirmModal } from "../Components/ui";
 import logo from "../Images/HL.png";
+import { getValidToken } from "../utils/token";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -103,6 +104,8 @@ export default function StorageManagerDashboard() {
   const [supplyOrders, setSupplyOrders] = useState<SupplyStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  // Mobile navigation drawer (ignored from lg up, where the sidebar is static).
+  const [navOpen, setNavOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   
   // Notifications
@@ -176,8 +179,9 @@ export default function StorageManagerDashboard() {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
-    const token = localStorage.getItem("token");
-    if (!token) {
+    // getValidToken returns null once expired, so a stale session redirects instead
+    // of loading a dashboard whose every request will 401.
+    if (!getValidToken()) {
       navigate("/login", { replace: true });
       return;
     }
@@ -286,7 +290,7 @@ export default function StorageManagerDashboard() {
       await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
-    } catch (err) {
+    } catch {
       toast.error("Failed to mark all as read");
     }
   };
@@ -367,17 +371,41 @@ export default function StorageManagerDashboard() {
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <div className={`min-h-screen flex ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"}`}>
-      {/* Sidebar */}
-      <aside className={`w-64 shadow-lg p-4 flex flex-col ${darkMode ? "bg-gray-800" : "bg-white"}`}>
-        <div 
-          className="flex items-center gap-3 mb-6 cursor-pointer hover:opacity-80 transition-opacity"
-          onClick={handleLogoClick}
-          title="Go to Homepage"
-        >
-          <img src={logo} alt="Hayat Logo" className="h-10 w-auto" />
-          <h2 className={`text-lg font-bold ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
-            Storage Manager
-          </h2>
+      {/* Backdrop - mobile only */}
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar - static from lg up, off-canvas drawer below that */}
+      <aside
+        aria-label="Dashboard navigation"
+        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 shadow-lg p-4 flex flex-col
+          transition-transform duration-200 ease-out lg:static lg:z-auto lg:translate-x-0
+          ${navOpen ? "translate-x-0" : "-translate-x-full"}
+          ${darkMode ? "bg-gray-800" : "bg-white"}`}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div
+            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity min-w-0"
+            onClick={handleLogoClick}
+            title="Go to Homepage"
+          >
+            <img src={logo} alt="Hayat Logo" className="h-10 w-auto shrink-0" />
+            <h2 className={`text-lg font-bold truncate ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
+              Storage Manager
+            </h2>
+          </div>
+          <button
+            onClick={() => setNavOpen(false)}
+            aria-label="Close navigation"
+            className="lg:hidden p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         <nav className="flex flex-col gap-3">
@@ -403,14 +431,23 @@ export default function StorageManagerDashboard() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className={`h-16 shadow-md flex items-center justify-between px-6 ${darkMode ? "bg-gray-800" : "bg-white"}`}>
-          <h1 className={`text-lg font-semibold ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
-            Storage Manager Dashboard
-          </h1>
+        <header className={`min-h-16 shadow-md flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-2 ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setNavOpen(true)}
+              aria-label="Open navigation"
+              className="lg:hidden p-2 -ml-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <h1 className={`text-base sm:text-lg font-semibold truncate ${darkMode ? "text-gray-200" : "text-gray-800"}`}>
+              Storage Manager Dashboard
+            </h1>
+          </div>
 
-          <div className="flex items-center gap-4 flex-1 justify-end">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 justify-end min-w-0">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 min-w-0 max-w-md">
               <input
                 type="text"
                 value={searchTerm}

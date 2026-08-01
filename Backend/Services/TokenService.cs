@@ -43,11 +43,16 @@ namespace Backend.Services
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+            // Configurable lifetime; clamped so a typo cannot mint a multi-year token.
+            var expiryHours = int.TryParse(_config["JwtSettings:ExpiryHours"], out var configured)
+                ? Math.Clamp(configured, 1, 24)
+                : 8;
+
             var token = new JwtSecurityToken(
                 issuer: _config["JwtSettings:Issuer"],
                 audience: _config["JwtSettings:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(2),
+                expires: DateTime.UtcNow.AddHours(expiryHours),
                 signingCredentials: creds
             );
 

@@ -21,15 +21,12 @@ import { JSX } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 import Spinner from "../Components/Spinner/Spinner";
+import { TOKEN_KEY, USER_KEY, isTokenExpired, clearSessionStorage } from "../utils/token";
 
 interface Props {
   children: JSX.Element;
   allowedRoles?: string[];
 }
-
-// Storage keys - shared across all tabs
-const TOKEN_KEY = "token";
-const USER_KEY = "user";
 
 /**
  * Get user from localStorage synchronously
@@ -51,10 +48,19 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   const { user, loading, isLoggingOut } = useAuth();
   const location = useLocation();
   
-  // SYNCHRONOUS CHECK - Read directly from localStorage
-  // This prevents white screen during AuthContext initialization
-  const tokenExists = !!localStorage.getItem(TOKEN_KEY);
-  const storageUser = getUserFromStorage();
+  // SYNCHRONOUS CHECK - Read directly from localStorage.
+  // The token must be present AND unexpired: treating "a string exists" as signed in
+  // let expired sessions into the dashboard, where every API call then 401'd and the
+  // page sat empty until the user manually signed out.
+  const storedToken = localStorage.getItem(TOKEN_KEY);
+  const tokenExists = !!storedToken && !isTokenExpired(storedToken);
+
+  if (storedToken && !tokenExists) {
+    // Expired: drop the stale session so the login page starts clean.
+    clearSessionStorage();
+  }
+
+  const storageUser = tokenExists ? getUserFromStorage() : null;
   
   // Use context user if available, otherwise fall back to localStorage
   const effectiveUser = user || storageUser;

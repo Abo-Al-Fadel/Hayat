@@ -15,6 +15,15 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { loginAPI } from "../Services/AuthService";
 import { stopAllSignalRConnections } from "../hooks/useSignalR";
+import {
+  TOKEN_KEY,
+  USER_KEY,
+  isTokenExpired,
+  millisecondsUntilExpiry,
+  clearSessionStorage,
+  getValidToken,
+} from "../utils/token";
+import { handleSessionExpired } from "../Services/sessionExpiry";
 
 export type User = {
   id: string;
@@ -36,10 +45,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-// Storage keys - shared across all tabs
-const TOKEN_KEY = "token";
-const USER_KEY = "user";
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -54,8 +59,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const storedToken = localStorage.getItem(TOKEN_KEY);
       const storedUser = localStorage.getItem(USER_KEY);
-      
-      if (storedToken && storedUser) {
+
+      // An expired token is not a session. Restoring it used to leave the app
+      // "signed in" with every request failing.
+      if (storedToken && isTokenExpired(storedToken)) {
+        clearSessionStorage();
+      } else if (storedToken && storedUser) {
         const parsedUser = JSON.parse(storedUser) as User;
         setToken(storedToken);
         setUser(parsedUser);
@@ -68,6 +77,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   }, []);
+
+  // Sign out exactly when the token expires, rather than waiting for the user to
+  // click something and discover a dashboard that cannot load anything.
+  useEffect(() => {
+    if (!token) return;
+
+    const remaining = millisecondsUntilExpiry(token);
+    if (remaining <= 0) {
+      handleSessionExpired();
+      return;
+    }
+
+    // setTimeout saturates above ~24.8 days; sessions are far shorter, but clamp anyway.
+    const delay = Math.min(remaining, 2_147_483_647);
+    const timer = window.setTimeout(() => handleSessionExpired(), delay);
+    return () => window.clearTimeout(timer);
+  }, [token]);
 
   // Listen for storage changes from other tabs
   useEffect(() => {
@@ -158,11 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 500);
   }, []);
 
-  // Computed auth state
-  const isAuthenticated = !!(token && user);
-  
+  // Computed auth state - an expired token is not authenticated.
+  const isAuthenticated = !!(token && user && !isTokenExpired(token));
+
   // Check if logged in
-  const isLoggedIn = useCallback(() => !!(token || localStorage.getItem(TOKEN_KEY)), [token]);
+  const isLoggedIn = useCallback(() => !!getValidToken(), []);
 
   return (
     <AuthContext.Provider value={{ 
@@ -183,8 +209,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 // Hook - MUST use this
 export const useAuth = () => useContext(AuthContext);
 
-// Helper to get token from localStorage (for API calls outside React)
-export const getAuthToken = (): string | null => localStorage.getItem(TOKEN_KEY);
+// Helper to get token from localStorage (for API calls outside React).
+// Returns null for an expired token so callers never send a doomed request.
+export const getAuthToken = (): string | null => getValidToken();
 
 // Helper to check auth status outside React
-export const isAuthenticatedStatic = (): boolean => !!localStorage.getItem(TOKEN_KEY);
+export const isAuthenticatedStatic = (): boolean => !!getValidToken();

@@ -20,6 +20,8 @@ import {
 } from "lucide-react";
 
 import toast, { Toaster } from "react-hot-toast";
+import { authorizedFetch, isSessionExpiredError } from "../Services/authorizedFetch";
+import { getValidToken } from "../utils/token";
 
 interface Category {
   id: number;
@@ -210,11 +212,9 @@ const PharmacistDashboard: React.FC = () => {
   // Auth context for proper logout
   const { logout: authLogout } = useAuth();
 
-  // Storage key - shared across all tabs
-  const TOKEN_KEY = "token";
-
-  // Get token from localStorage (shared across all tabs)
-  const getToken = () => localStorage.getItem(TOKEN_KEY);
+  // Get token from localStorage. Returns null once expired, so we never fire a
+  // request that is guaranteed to 401.
+  const getToken = () => getValidToken();
 
   // Log mount for debugging
   useEffect(() => {
@@ -237,7 +237,7 @@ const PharmacistDashboard: React.FC = () => {
     try {
       const token = getToken();
       if (!token) return;
-      const res = await fetch(`${NOTIFICATIONS_ENDPOINT}/markread`, {
+      const res = await authorizedFetch(`${NOTIFICATIONS_ENDPOINT}/markread`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ids: serverIds }),
@@ -252,7 +252,7 @@ const PharmacistDashboard: React.FC = () => {
     try {
       const token = getToken();
       if (!token) return false;
-      const res = await fetch(`${NOTIFICATIONS_ENDPOINT}/${serverId}`, {
+      const res = await authorizedFetch(`${NOTIFICATIONS_ENDPOINT}/${serverId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -295,7 +295,7 @@ const PharmacistDashboard: React.FC = () => {
       const token = getToken();
       if (!token) return;
       
-      const res = await fetch(NOTIFICATIONS_ENDPOINT, {
+      const res = await authorizedFetch(NOTIFICATIONS_ENDPOINT, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;
@@ -329,7 +329,7 @@ const PharmacistDashboard: React.FC = () => {
     try {
       setCategoriesLoading(true);
       const token = getToken();
-      const res = await fetch(`${API_BASE}/api/Categories`, {
+      const res = await authorizedFetch(`${API_BASE}/api/Categories`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
@@ -385,15 +385,11 @@ const PharmacistDashboard: React.FC = () => {
         url = `${API_BASE}/api/Medicine/by-category/${categoryId}`;
       }
 
-      const res = await fetch(url, {
+      const res = await authorizedFetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       
       if (!res.ok) {
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          return;
-        }
         const txt = await res.text();
         throw new Error(txt || "Failed to fetch products");
       }
@@ -427,8 +423,8 @@ const PharmacistDashboard: React.FC = () => {
       // Check if there are more items to load
       setHasMore(formatted.length >= PAGE_SIZE);
     } catch (err) {
-      // Only show error if not logging out
-      if (!isLoggingOutRef.current) {
+      // Stay quiet when the session simply ended - the app is already redirecting.
+      if (!isLoggingOutRef.current && !isSessionExpiredError(err)) {
         toast.error("Failed loading products.");
       }
     } finally {
@@ -558,10 +554,12 @@ const PharmacistDashboard: React.FC = () => {
       
       setCategories(prev => {
         switch (action) {
-          case "created":
-            // Filter out any existing entry with same ID first (prevents duplicates)
+          case "created": {
+            // Braces scope the declaration to this case; without them it leaked into
+            // the sibling cases at parse time.
             const filtered = prev.filter(c => c.id !== id);
             return [...filtered, { id, name }];
+          }
           case "updated":
             return prev.map(c => c.id === id ? { ...c, name } : c);
           case "deleted":
@@ -674,7 +672,7 @@ const PharmacistDashboard: React.FC = () => {
       try {
         const token = getToken();
         if (!token) return;
-        const res = await fetch(`${API_BASE}/api/Medicine`, {
+        const res = await authorizedFetch(`${API_BASE}/api/Medicine`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;
@@ -788,7 +786,7 @@ const PharmacistDashboard: React.FC = () => {
         return;
       }
 
-      const res = await fetch(`${API_BASE}/api/Order`, {
+      const res = await authorizedFetch(`${API_BASE}/api/Order`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -813,8 +811,8 @@ const PharmacistDashboard: React.FC = () => {
       }));
 
       setOrders(mapped.reverse());
-    } catch {
-      toast.error("Failed to load orders");
+    } catch (err) {
+      if (!isSessionExpiredError(err)) toast.error("Failed to load orders");
     } finally {
       setOrdersLoading(false);
     }
@@ -836,7 +834,7 @@ const PharmacistDashboard: React.FC = () => {
       if (!token) {
         return null;
       }
-      const res = await fetch(`${API_BASE}/api/Order/${orderId}/invoice`, {
+      const res = await authorizedFetch(`${API_BASE}/api/Order/${orderId}/invoice`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -845,8 +843,8 @@ const PharmacistDashboard: React.FC = () => {
       }
       const text = await res.text();
       return text;
-    } catch {
-      toast.error("Failed to fetch invoice");
+    } catch (err) {
+      if (!isSessionExpiredError(err)) toast.error("Failed to fetch invoice");
       return null;
     }
   };
@@ -906,7 +904,7 @@ const PharmacistDashboard: React.FC = () => {
     // 1. Stop SignalR connection first
     try {
       await stopConnection();
-    } catch (e) {
+    } catch {
       // Ignore errors
     }
     
@@ -1005,7 +1003,7 @@ const PharmacistDashboard: React.FC = () => {
         notes: null
       };
 
-      const res = await fetch(`${API_BASE}/api/Order`, {
+      const res = await authorizedFetch(`${API_BASE}/api/Order`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(checkoutPayload),
@@ -1036,8 +1034,8 @@ const PharmacistDashboard: React.FC = () => {
       setInvoiceModalOpen(true);
 
       if (ordersModalOpen) await fetchOrders();
-    } catch {
-      toast.error("Checkout failed. Please try again.");
+    } catch (err) {
+      if (!isSessionExpiredError(err)) toast.error("Checkout failed. Please try again.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -1155,7 +1153,7 @@ const PharmacistDashboard: React.FC = () => {
 
       {/* Fixed notification panel */}
       {notifOpen && (
-        <div className={`fixed right-6 top-16 z-50 w-80 rounded-lg shadow-lg ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+        <div className={`fixed right-2 sm:right-6 top-16 z-50 w-[calc(100vw-1rem)] max-w-sm sm:w-80 rounded-lg shadow-lg ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
           <div className="flex items-center justify-between px-3 py-2 border-b">
             <div className="font-medium">Notifications</div>
             <div className="flex items-center gap-2">
@@ -1180,7 +1178,7 @@ const PharmacistDashboard: React.FC = () => {
       )}
 
       {/* Categories - Single select with pill-shaped design */}
-      <div className={`px-6 py-3 flex gap-2 border-b overflow-x-auto ${darkMode ? "border-gray-800" : "border-gray-200"}`}>
+      <div className={`px-4 sm:px-6 py-3 flex gap-2 border-b overflow-x-auto ${darkMode ? "border-gray-800" : "border-gray-200"}`}>
         {/* All Categories button */}
         <button
           onClick={() => handleCategorySelect(null)}
@@ -1226,11 +1224,13 @@ const PharmacistDashboard: React.FC = () => {
       </div>
 
       {/* Main layout: ensure flex children can shrink so internal scrolling works */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0 lg:overflow-hidden overflow-y-auto">
         {/* Cart - Fixed height with internal scroll, fits 7+ items before scrolling */}
         {/* Raised position, rounded bottom-right corner only */}
         <aside
-          className={`w-80 p-4 flex flex-col max-h-[calc(90vh-45px)] rounded-br-2xl border-r ${darkMode ? "bg-gray-900/60 border-gray-800" : "bg-white/80 border-gray-200"}`}
+          className={`order-2 lg:order-1 w-full lg:w-80 shrink-0 p-4 flex flex-col
+            lg:max-h-[calc(90vh-45px)] rounded-br-2xl border-t lg:border-t-0 lg:border-r
+            ${darkMode ? "bg-gray-900/60 border-gray-800" : "bg-white/80 border-gray-200"}`}
         >
           <div className="flex justify-between items-center mb-2">
             <h2 className="text-lg font-semibold">Cart</h2>
@@ -1303,8 +1303,8 @@ const PharmacistDashboard: React.FC = () => {
         </aside>
 
         {/* Product Grid - Responsive */}
-        <main className="flex-1 p-6 min-h-0 overflow-auto">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <main className="order-1 lg:order-2 flex-1 p-4 sm:p-6 min-h-0 lg:overflow-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
             {loadingProducts ? (
               <div className="col-span-full text-center py-8">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
