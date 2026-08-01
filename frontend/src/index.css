@@ -11,4 +11,40 @@ html, body, #root {
 }
 
 /* any app-level vars */
-:root { --primary-dark: #003465; }
+:root {
+  --primary-dark: #003465;
+  --app-bg: #0b3f7a;       /* matches the login backdrop */
+  --app-bg-dark: #111827;  /* tailwind gray-900, matches dashboard dark mode */
+}
+
+/*
+ * Paint a brand colour immediately.
+ * With no background set, the browser painted white until React mounted (and until
+ * the login background image finished downloading), which showed as a white flash on
+ * every navigation into /login and after signing out.
+ */
+html {
+  background-color: var(--app-bg);
+  color-scheme: light;
+}
+
+html.dark {
+  background-color: var(--app-bg-dark);
+  color-scheme: dark;
+}
+
+body {
+  background-color: inherit;
+}
+
+/* Respect users who ask for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

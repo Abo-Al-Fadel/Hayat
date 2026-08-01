@@ -9,7 +9,8 @@
  * - Log all auth events
  */
 import React, { useState, useRef, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import hayat from "../Images/HL.png";
 import "./Login.css";
 import { useAuth } from "../Context/AuthContext";
@@ -22,6 +23,11 @@ const Login: React.FC = () => {
   
   // Anti-loop protection
   const hasRedirectedRef = useRef(false);
+
+  const [searchParams] = useSearchParams();
+
+  // Set by the session-expiry handler when it bounces the user here.
+  const sessionExpired = searchParams.get("reason") === "expired";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -93,12 +99,28 @@ const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-loginpage bg-cover bg-center">
-      <div className="bg-white/5 backdrop-blur-md shadow-xl rounded-xl w-full max-w-md p-10">
+      <div className="bg-white/5 backdrop-blur-md shadow-xl rounded-xl w-full max-w-md p-6 sm:p-10">
+        <Link
+          to="/"
+          aria-label="Back to home"
+          className="inline-flex items-center gap-1.5 text-white/70 hover:text-white transition-colors text-sm mb-4 -ml-1"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to home
+        </Link>
+
         <div className="flex justify-center mb-6">
-          <img src={hayat} alt="Hayat" className="h-20 w-20 object-contain" />
+          <img src={hayat} alt="Hayat" className="h-16 w-16 sm:h-20 sm:w-20 object-contain" />
         </div>
 
         <h2 className="text-3xl font-bold text-white text-center mb-6">Sign In</h2>
+
+        {/* The previous session ran out rather than the user signing out */}
+        {sessionExpired && !unauthorizedMessage && (
+          <div className="bg-blue-500/20 border border-blue-400 text-blue-100 px-4 py-3 rounded-lg mb-4 text-center text-sm">
+            Your session expired. Please sign in again.
+          </div>
+        )}
 
         {/* Show unauthorized access warning */}
         {unauthorizedMessage && (

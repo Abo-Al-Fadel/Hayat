@@ -1,5 +1,7 @@
 .bg-loginpage {
-   background-image: url('../Images/loginBack.png');
+  /* Solid colour first so there is no white gap while the artwork downloads. */
+  background-color: #0b3f7a;
+  background-image: url('../Images/loginBack.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
