@@ -367,12 +367,26 @@ export default function AdminDashboard() {
   const handleMarkAllRead = useCallback(async () => {
     try {
       await markAllNotificationsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      setUnreadCount(0);
     } catch {
-      toast.error("Failed to mark all as read");
+      // A 404 just means there was nothing unread to mark; anything else is a real
+      // failure but must not leave the badge stuck, so the local state clears either way.
     }
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setUnreadCount(0);
   }, []);
+
+  /**
+   * Toggles the notification panel. Opening it marks everything read, which is what
+   * the bell badge implies and what the Pharmacist dashboard already did - the Admin
+   * bell only toggled the panel, so the red count never cleared.
+   */
+  const toggleNotifications = useCallback(async () => {
+    const willOpen = !showNotifications;
+    setShowNotifications(willOpen);
+    if (willOpen && unreadCount > 0) {
+      await handleMarkAllRead();
+    }
+  }, [showNotifications, unreadCount, handleMarkAllRead]);
 
   const handleNotificationClick = useCallback((notification: Notification) => {
     handleMarkNotificationRead(notification.id);
@@ -1168,7 +1182,8 @@ export default function AdminDashboard() {
           {/* Notification Bell - Appears on all pages */}
           <div className="relative ml-2">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
+              onClick={toggleNotifications}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
               className="relative p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
             >
               <Bell className={`h-5 w-5 ${darkMode ? "text-gray-300" : "text-gray-600"}`} />
