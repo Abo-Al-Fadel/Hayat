@@ -13,7 +13,8 @@ export interface TopMedicine {
   name: string;
   unitsSold: number;
   revenue: number;
-  grossProfit: number;
+  /** Null when nothing sold in the period had a recorded purchase cost. */
+  grossProfit: number | null;
   grossMarginPercent: number | null;
 }
 
@@ -23,8 +24,11 @@ export interface FinancialStats {
 
   revenue: number;
   costOfGoodsSold: number;
-  grossProfit: number;
+  /** Null when nothing sold in the period had a recorded purchase cost. */
+  grossProfit: number | null;
   grossMarginPercent: number | null;
+  /** Portion of revenue the profit figures are actually based on. */
+  measurableRevenue: number;
   orderCount: number;
   unitsSold: number;
   averageOrderValue: number;
@@ -33,7 +37,8 @@ export interface FinancialStats {
 
   inventoryValueAtCost: number;
   inventoryValueAtRetail: number;
-  potentialProfit: number;
+  potentialProfit: number | null;
+  inventoryHasKnownCost: boolean;
   inventoryUnits: number;
   lowStockCount: number;
   outOfStockCount: number;
@@ -61,8 +66,10 @@ export const suggestPrice = async (cost: number): Promise<PriceSuggestion> => {
   return response.data;
 };
 
-export const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value ?? 0);
+export const formatCurrency = (value: number | null | undefined): string =>
+  value === null || value === undefined
+    ? "—"
+    : new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(value);
 
 export const formatPercent = (value: number | null): string =>
   value === null || value === undefined ? "—" : `${value.toFixed(1)}%`;

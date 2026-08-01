@@ -40,11 +40,17 @@ public class StatsService : IStatsService
             .ToListAsync();
 
         var revenue = lineItems.Sum(i => i.Price * i.Quantity);
-        var cogs = lineItems.Sum(i => i.CostPrice * i.Quantity);
-        var grossProfit = revenue - cogs;
 
-        // Lines whose cost was never recorded (medicine never received via a supply
-        // order) would otherwise masquerade as pure profit.
+        // Profit is only meaningful for lines whose purchase cost was actually recorded.
+        // Treating an unrecorded cost as zero reported the entire sale as profit and a
+        // 100% margin, which is not a small inaccuracy - it is a fabricated number.
+        // Those lines are excluded from the profit figures and surfaced separately.
+        var measurable = lineItems.Where(i => i.CostPrice > 0).ToList();
+
+        var measurableRevenue = measurable.Sum(i => i.Price * i.Quantity);
+        var cogs = measurable.Sum(i => i.CostPrice * i.Quantity);
+        var grossProfit = measurableRevenue - cogs;
+
         var revenueWithUnknownCost = lineItems
             .Where(i => i.CostPrice <= 0)
             .Sum(i => i.Price * i.Quantity);
@@ -59,7 +65,7 @@ public class StatsService : IStatsService
             {
                 Date = g.Key,
                 Revenue = g.Sum(i => i.Price * i.Quantity),
-                GrossProfit = g.Sum(i => (i.Price - i.CostPrice) * i.Quantity),
+                GrossProfit = g.Where(i => i.CostPrice > 0).Sum(i => (i.Price - i.CostPrice) * i.Quantity),
                 OrderCount = g.Select(i => i.Id).Distinct().Count()
             })
             .ToList();
@@ -69,16 +75,19 @@ public class StatsService : IStatsService
             .Select(g =>
             {
                 var medRevenue = g.Sum(i => i.Price * i.Quantity);
-                var medProfit = g.Sum(i => (i.Price - i.CostPrice) * i.Quantity);
+                var priced = g.Where(i => i.CostPrice > 0).ToList();
+                var medMeasurableRevenue = priced.Sum(i => i.Price * i.Quantity);
+                var medProfit = priced.Sum(i => (i.Price - i.CostPrice) * i.Quantity);
                 return new TopMedicineDto
                 {
                     MedicineId = g.Key.MedicineId,
                     Name = g.Key.MedicineName,
                     UnitsSold = g.Sum(i => i.Quantity),
                     Revenue = medRevenue,
-                    GrossProfit = medProfit,
-                    GrossMarginPercent = medRevenue > 0
-                        ? Math.Round(medProfit / medRevenue * 100m, 2, MidpointRounding.AwayFromZero)
+                    // Null rather than zero: "we do not know" is not "no profit".
+                    GrossProfit = medMeasurableRevenue > 0 ? Round(medProfit) : null,
+                    GrossMarginPercent = medMeasurableRevenue > 0
+                        ? Math.Round(medProfit / medMeasurableRevenue * 100m, 2, MidpointRounding.AwayFromZero)
                         : null
                 };
             })
@@ -102,10 +111,13 @@ public class StatsService : IStatsService
 
             Revenue = Round(revenue),
             CostOfGoodsSold = Round(cogs),
-            GrossProfit = Round(grossProfit),
-            GrossMarginPercent = revenue > 0
-                ? Math.Round(grossProfit / revenue * 100m, 2, MidpointRounding.AwayFromZero)
+            // Null when nothing in the period had a recorded cost, so the UI can say
+            // "unknown" instead of printing revenue again and calling it profit.
+            GrossProfit = measurableRevenue > 0 ? Round(grossProfit) : null,
+            GrossMarginPercent = measurableRevenue > 0
+                ? Math.Round(grossProfit / measurableRevenue * 100m, 2, MidpointRounding.AwayFromZero)
                 : null,
+            MeasurableRevenue = Round(measurableRevenue),
             OrderCount = orderCount,
             UnitsSold = unitsSold,
             AverageOrderValue = orderCount > 0 ? Round(revenue / orderCount) : 0m,
@@ -113,7 +125,10 @@ public class StatsService : IStatsService
 
             InventoryValueAtCost = Round(inventoryAtCost),
             InventoryValueAtRetail = Round(inventoryAtRetail),
-            PotentialProfit = Round(inventoryAtRetail - inventoryAtCost),
+            // Without any recorded cost this would just restate the retail value and
+            // label it profit, so it is reported as unknown instead.
+            PotentialProfit = inventoryAtCost > 0 ? Round(inventoryAtRetail - inventoryAtCost) : null,
+            InventoryHasKnownCost = inventoryAtCost > 0,
             InventoryUnits = inventory.Sum(m => m.Quantity),
             LowStockCount = inventory.Count(m => m.Quantity > 0 && m.Quantity <= m.LowStockThreshold),
             OutOfStockCount = inventory.Count(m => m.Quantity <= 0),

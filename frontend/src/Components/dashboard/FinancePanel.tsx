@@ -105,9 +105,17 @@ export function FinancePanel() {
     return <p className="text-gray-500">No financial data available.</p>;
   }
 
-  const profitTone = stats.grossProfit > 0 ? "positive" : stats.grossProfit < 0 ? "negative" : "neutral";
+  const profitKnown = stats.grossProfit !== null;
+  const profitTone = !profitKnown
+    ? "neutral"
+    : stats.grossProfit! > 0
+    ? "positive"
+    : stats.grossProfit! < 0
+    ? "negative"
+    : "neutral";
   const unknownCostShare =
     stats.revenue > 0 ? (stats.revenueWithUnknownCost / stats.revenue) * 100 : 0;
+  const allCostUnknown = stats.revenue > 0 && stats.measurableRevenue <= 0;
 
   return (
     <div className="space-y-6">
@@ -134,10 +142,22 @@ export function FinancePanel() {
       {/* Honesty banner: profit is understated while any sold item has no recorded cost. */}
       {stats.revenueWithUnknownCost > 0 && (
         <div className="rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-          <strong>{formatCurrency(stats.revenueWithUnknownCost)}</strong> of revenue (
-          {unknownCostShare.toFixed(0)}%) came from medicines with no recorded purchase cost,
-          so profit below is understated. Cost is recorded when a supply order is marked{" "}
-          <em>Stored</em>.
+          {allCostUnknown ? (
+            <>
+              <strong>Profit cannot be calculated yet.</strong> None of the{" "}
+              {formatCurrency(stats.revenue)} of revenue in this period has a recorded
+              purchase cost, so profit and margin are shown as “—” rather than as a
+              number that would simply repeat revenue.
+            </>
+          ) : (
+            <>
+              <strong>{formatCurrency(stats.revenueWithUnknownCost)}</strong> of revenue (
+              {unknownCostShare.toFixed(0)}%) has no recorded purchase cost and is
+              excluded from the profit figures below, which are based on{" "}
+              {formatCurrency(stats.measurableRevenue)}.
+            </>
+          )}{" "}
+          Cost starts being recorded once a supply order is marked <em>Stored</em>.
         </div>
       )}
 
@@ -149,11 +169,16 @@ export function FinancePanel() {
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <MoneyCard label="Revenue" value={formatCurrency(stats.revenue)} />
           <MoneyCard label="Cost of goods sold" value={formatCurrency(stats.costOfGoodsSold)} />
-          <MoneyCard label="Gross profit" value={formatCurrency(stats.grossProfit)} tone={profitTone} />
+          <MoneyCard
+            label="Gross profit"
+            value={formatCurrency(stats.grossProfit)}
+            hint={profitKnown ? undefined : "No recorded purchase cost yet"}
+            tone={profitTone}
+          />
           <MoneyCard
             label="Gross margin"
             value={formatPercent(stats.grossMarginPercent)}
-            hint="Profit ÷ revenue"
+            hint={profitKnown ? "Profit ÷ revenue with known cost" : "No recorded purchase cost yet"}
             tone={profitTone}
           />
         </div>
@@ -194,8 +219,12 @@ export function FinancePanel() {
           <MoneyCard
             label="Potential profit"
             value={formatCurrency(stats.potentialProfit)}
-            hint="If all current stock sells"
-            tone="positive"
+            hint={
+              stats.inventoryHasKnownCost
+                ? "If all current stock sells"
+                : "Needs a recorded purchase cost"
+            }
+            tone={stats.inventoryHasKnownCost ? "positive" : "neutral"}
           />
           <MoneyCard
             label="Units in stock"
@@ -236,7 +265,9 @@ export function FinancePanel() {
                     <td className="py-2 pr-4 text-right">{formatCurrency(medicine.revenue)}</td>
                     <td
                       className={`py-2 pr-4 text-right ${
-                        medicine.grossProfit >= 0
+                        medicine.grossProfit === null
+                          ? "text-gray-400"
+                          : medicine.grossProfit >= 0
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-red-600 dark:text-red-400"
                       }`}
