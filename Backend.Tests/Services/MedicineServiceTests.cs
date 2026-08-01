@@ -1,10 +1,13 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using AutoMapper;
 using Backend.Services;
-using Hayaa.Backend.Dtos.Medicine;
+using Hayat.Backend.Configurations;
+using Hayat.Backend.Dtos.Medicine;
+using Microsoft.Extensions.Options;
 
 namespace Backend.Tests.Services;
 
@@ -23,10 +26,11 @@ public class MedicineServiceTests
 
     private static IMapper CreateMapper()
     {
+        // AutoMapper 15 requires an ILoggerFactory on MapperConfiguration.
         var config = new MapperConfiguration(cfg =>
         {
             cfg.CreateMap<Medicine, MedicineDto>();
-        });
+        }, NullLoggerFactory.Instance);
         return config.CreateMapper();
     }
 
@@ -41,8 +45,18 @@ public class MedicineServiceTests
             notificationService ?? Mock.Of<INotificationService>(),
             Mock.Of<ILogger<MedicineService>>(),
             mapper ?? CreateMapper(),
-            env ?? Mock.Of<IWebHostEnvironment>()
+            env ?? Mock.Of<IWebHostEnvironment>(),
+            CreatePricingService()
         );
+    }
+
+    private static PricingService CreatePricingService()
+    {
+        return new PricingService(Options.Create(new PricingSettings
+        {
+            MarkupTiers = new List<MarkupTier> { new() { UpToCost = 1000m, MarkupPercent = 20m } },
+            DefaultMarkupPercent = 10m
+        }));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -209,11 +223,11 @@ public class MedicineServiceTests
     {
         // Arrange
         using var context = CreateInMemoryDbContext();
-        var medicine = new Medicine 
-        { 
-            Id = 1, 
-            Name = "Aspirin", 
-            Price = 5.99m, 
+        var medicine = new Medicine
+        {
+            Id = 1,
+            Name = "Aspirin",
+            Price = 5.99m,
             Quantity = 100,
             Image = "/images/aspirin.jpg",
             CategoryId = 5,
@@ -235,7 +249,7 @@ public class MedicineServiceTests
         Assert.Equal("/images/aspirin.jpg", result.Image);
         Assert.Equal(5, result.CategoryId);
         Assert.True(result.IsHidden);
-        
+
         // Verify in database
         var dbMedicine = await context.Medicines.FindAsync(1);
         Assert.Equal(25, dbMedicine!.LowStockThreshold);
