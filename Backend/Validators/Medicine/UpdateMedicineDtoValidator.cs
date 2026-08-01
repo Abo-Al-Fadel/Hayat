@@ -1,23 +1,23 @@
 
 
 using FluentValidation;
-using Hayaa.Backend.Dtos.Medicine;
+using Hayat.Backend.Dtos.Medicine;
 
 public class UpdateMedicineValidator : AbstractValidator<UpdateMedicineDto>
 {
     public UpdateMedicineValidator()
     {
-        RuleFor(x=> x.Name)
+        RuleFor(x => x.Name)
         .NotEmpty()
         .MaximumLength(100);
 
-        RuleFor(x=> x.Price)
+        RuleFor(x => x.Price)
         .GreaterThan(0)
-        .PrecisionScale(10,2,true);
+        .PrecisionScale(10, 2, true);
 
-        RuleFor(x=> x.Quantity)
+        RuleFor(x => x.Quantity)
         .GreaterThanOrEqualTo(0);
-        
+
     }
 
 }
