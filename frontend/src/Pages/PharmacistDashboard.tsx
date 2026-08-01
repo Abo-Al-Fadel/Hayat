@@ -322,8 +322,8 @@ const PharmacistDashboard: React.FC = () => {
   };
 
   /**
-   * Fetch categories from backend API
-   * GET /api/Categories - AllowAnonymous endpoint
+   * Fetch categories from the backend.
+   * GET /api/Categories - requires an authenticated Admin, Pharmacist or StorageManager.
    */
   const fetchCategories = useCallback(async () => {
     try {
@@ -333,6 +333,10 @@ const PharmacistDashboard: React.FC = () => {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) {
+        // Previously this returned silently, so an authorization regression showed up
+        // as an empty category bar with no clue why.
+        console.error(`[Pharmacist] Categories request failed: ${res.status}`);
+        toast.error("Could not load categories.");
         return;
       }
       const data = await res.json();
@@ -341,8 +345,11 @@ const PharmacistDashboard: React.FC = () => {
         name: c.name,
       }));
       setCategories(mapped);
-    } catch {
-      // Silent fail - categories are optional
+    } catch (err) {
+      if (!isSessionExpiredError(err)) {
+        console.error("[Pharmacist] Categories request failed:", err);
+        toast.error("Could not load categories.");
+      }
     } finally {
       setCategoriesLoading(false);
     }

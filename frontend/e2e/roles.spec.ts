@@ -104,6 +104,31 @@ test.describe("Role isolation", () => {
     expect(adminTriesShipped.status(), "Shipped belongs to StorageManager").toBe(403);
   });
 
+  test("every signed-in role can read categories, but only Admin may change them", async ({ request }) => {
+    // Regression: a controller-level [Authorize(Roles = "Admin")] is AND-ed with the
+    // action-level attribute, so the broader action rule could not widen it and the
+    // Pharmacist category bar silently rendered empty.
+    for (const role of ["admin", "pharmacist", "storage"] as const) {
+      const token = await apiLogin(ACCOUNTS[role].username, ACCOUNTS[role].password);
+      const res = await request.get(`${API_BASE}/api/Categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status(), `${role} reading categories`).toBe(200);
+      expect(Array.isArray(await res.json())).toBe(true);
+    }
+
+    // Anonymous is still refused.
+    expect((await request.get(`${API_BASE}/api/Categories`)).status()).toBe(401);
+
+    // Writes remain Admin-only.
+    const pharmToken = await apiLogin(ACCOUNTS.pharmacist.username, ACCOUNTS.pharmacist.password);
+    const created = await request.post(`${API_BASE}/api/Categories`, {
+      headers: { Authorization: `Bearer ${pharmToken}` },
+      data: { name: "should-not-be-allowed" },
+    });
+    expect(created.status()).toBe(403);
+  });
+
   test("notifications cannot be mutated across roles", async ({ request }) => {
     const adminToken = await apiLogin(ACCOUNTS.admin.username, ACCOUNTS.admin.password);
     const pharmToken = await apiLogin(ACCOUNTS.pharmacist.username, ACCOUNTS.pharmacist.password);

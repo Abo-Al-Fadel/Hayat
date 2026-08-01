@@ -1,9 +1,19 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+/// <summary>
+/// Categories.
+///
+/// NOTE ON AUTHORIZATION: do not put a controller-level [Authorize(Roles = "Admin")]
+/// here. Multiple [Authorize] attributes are cumulative in ASP.NET Core - a
+/// controller-level role requirement is AND-ed with the action-level one, so a
+/// broader action attribute cannot widen it. (Only [AllowAnonymous] short-circuits,
+/// which is why the previously-anonymous GET appeared to work under a controller-level
+/// Admin rule.) Each action therefore declares its own roles.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class CategoriesController : ControllerBase
 {
     private readonly ICategoryService _service;
@@ -14,22 +24,25 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create(CreateCategoryDto dto)
         => Ok(await _service.CreateAsync(dto));
 
     [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(int id, UpdateCategoryDto dto)
         => Ok(await _service.UpdateAsync(id, dto));
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)
     {
         await _service.DeleteAsync(id);
         return Ok("Category deleted");
     }
 
-    // Readable by every signed-in role (all three dashboards filter by category),
-    // but not by anonymous callers - the catalogue structure is not public data.
+    // Readable by every signed-in role - all three dashboards filter by category -
+    // but not by anonymous callers.
     [HttpGet]
     [Authorize(Roles = "Admin,Pharmacist,StorageManager")]
     public async Task<IActionResult> GetAll()
