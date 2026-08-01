@@ -9,5 +9,5 @@ public class OrderItemDto
     [Range(1, int.MaxValue, ErrorMessage = "Quantity must be at least 1")]
     public int Quantity { get; set; }
     [Required]
-    public PaymentMethodEnum PaymentMethod { get; set; } 
+    public PaymentMethodEnum PaymentMethod { get; set; }
 }

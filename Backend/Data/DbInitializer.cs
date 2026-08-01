@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 
 public static class DbInitializer
 {
@@ -8,30 +7,66 @@ public static class DbInitializer
         using var scope = serviceProvider.CreateScope();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
-        var roles = Enum.GetNames(typeof(AppRole));
+        var roles = Enum.GetNames<AppRole>();
 
         foreach (var role in roles)
         {
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole(role));
         }
-        
-        // Default should be 30
-        var context = scope.ServiceProvider.GetRequiredService<PharmacyDbContext>();
-        var medicinesToFix = await context.Medicines
-            .Where(m => m.LowStockThreshold < 30)
-            .ToListAsync();
-            
-        if (medicinesToFix.Any())
-        {
-            foreach (var medicine in medicinesToFix)
-            {
-                medicine.LowStockThreshold = 30;
-            }
-            await context.SaveChangesAsync();
-            Console.WriteLine($"[DbInit] Updated {medicinesToFix.Count} medicines to have LowStockThreshold=30");
-        }
+
+        // NOTE: LowStockThreshold is backfilled once by the
+        // BackfillLowStockThresholdDefault migration. It is deliberately NOT re-applied
+        // on every start - doing so silently reverted any per-medicine threshold an
+        // Admin set below 30 on the next restart.
+
+        await SeedBootstrapAdminAsync(scope.ServiceProvider);
     }
 
-}
+    /// <summary>
+    /// Creates the first Admin on an otherwise empty database. Every user-management
+    /// endpoint requires an existing Admin, so without this a fresh deployment has no
+    /// way in.
+    ///
+    /// Opt-in only: nothing happens unless BootstrapAdmin:UserName / :Email / :Password
+    /// are all configured, and nothing happens if any user already exists. There are no
+    /// built-in default credentials.
+    /// </summary>
+    private static async Task SeedBootstrapAdminAsync(IServiceProvider services)
+    {
+        var config = services.GetRequiredService<IConfiguration>();
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
 
+        var userName = config["BootstrapAdmin:UserName"];
+        var email = config["BootstrapAdmin:Email"];
+        var password = config["BootstrapAdmin:Password"];
+
+        if (string.IsNullOrWhiteSpace(userName) ||
+            string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(password))
+        {
+            return;
+        }
+
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+
+        if (userManager.Users.Any())
+        {
+            logger.LogInformation("[DbInit] Users already exist - skipping bootstrap admin.");
+            return;
+        }
+
+        var admin = new AppUser { UserName = userName, Email = email, EmailConfirmed = true };
+        var result = await userManager.CreateAsync(admin, password);
+
+        if (!result.Succeeded)
+        {
+            logger.LogError("[DbInit] Bootstrap admin creation failed: {Errors}",
+                string.Join("; ", result.Errors.Select(e => e.Description)));
+            return;
+        }
+
+        await userManager.AddToRoleAsync(admin, nameof(AppRole.Admin));
+        logger.LogWarning("[DbInit] Bootstrap Admin '{UserName}' created. Change this password immediately.", userName);
+    }
+}

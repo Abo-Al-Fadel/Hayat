@@ -47,7 +47,22 @@ builder.Services.AddSwaggerGen(option =>
 });
 
 // Identity
-builder.Services.AddIdentity<AppUser, IdentityRole>()
+builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
+{
+    // Lockout: AuthController signs in via CheckPasswordSignInAsync(lockoutOnFailure: true),
+    // so these limits actually throttle password guessing.
+    options.Lockout.AllowedForNewUsers = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+
+    options.Password.RequiredLength = 8;
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+
+    options.User.RequireUniqueEmail = true;
+})
     .AddEntityFrameworkStores<PharmacyDbContext>()
     .AddDefaultTokenProviders();
 
@@ -91,21 +106,34 @@ builder.Services.AddAuthentication(options =>
 // Authorization
 builder.Services.AddAuthorization();
 
-// CORS - Allow SignalR from React dev server and production
-// SignalR requires AllowCredentials() which conflicts with AllowAnyOrigin()
+// CORS - allowed origins come from configuration (Cors:AllowedOrigins) so a deployed
+// environment can point at its real frontend host instead of hardcoded localhost ports.
+// SignalR needs AllowCredentials(), which cannot be combined with AllowAnyOrigin(),
+// so the origin list must always be explicit - never "*".
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+
+if (corsOrigins is null || corsOrigins.Length == 0)
+{
+    corsOrigins = builder.Environment.IsDevelopment()
+        ? new[]
+        {
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3002",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3002"
+        }
+        : throw new InvalidOperationException(
+            "Cors:AllowedOrigins must be configured outside Development. Refusing to start with no allowed origins.");
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("OpenCors", policy =>
+    options.AddPolicy("AppCors", policy =>
     {
         policy
-            .WithOrigins(
-                "http://localhost:3000",      // React dev server
-                "http://localhost:3001",      // Alternate React port 1
-                "http://localhost:3002",      // Alternate React port 2
-                "http://127.0.0.1:3000",
-                "http://127.0.0.1:3001",
-                "http://127.0.0.1:3002"
-            )
+            .WithOrigins(corsOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();              // Required for SignalR WebSockets
@@ -115,6 +143,10 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+
+// Global exception handler - must be first so it wraps everything downstream.
+app.UseMiddleware<ErrorHandlingMiddleware>();
+
 app.UseStaticFiles();
 app.UseHttpsRedirection();
 
@@ -132,7 +164,7 @@ if (app.Environment.IsDevelopment())
 }
 
 // Middleware order
-app.UseCors("OpenCors");
+app.UseCors("AppCors");
 app.UseAuthentication();
 app.UseAuthorization();
 

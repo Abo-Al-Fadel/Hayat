@@ -57,8 +57,16 @@ export const getInvoice = async (id: number): Promise<string> => {
 };
 
 // CREATE order
-export const createOrder = async (items: { medicineId: number; quantity: number }[]) => {
-  const response = await api.post("/api/Order", items);
+// The endpoint binds a CheckoutDto, not a bare array - posting the array alone
+// bound an empty Items list and always failed validation.
+export const createOrder = async (
+  items: { medicineId: number; quantity: number }[],
+  paymentMethod: number = 0
+) => {
+  const response = await api.post("/api/Order", {
+    items: items.map((i) => ({ ...i, paymentMethod })),
+    paymentMethod,
+  });
   return response.data;
 };
 

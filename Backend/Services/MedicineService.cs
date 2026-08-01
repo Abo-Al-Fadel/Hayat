@@ -1,5 +1,6 @@
 using AutoMapper;
-using Hayaa.Backend.Dtos.Medicine;
+using Hayat.Backend.Dtos.Medicine;
+using Hayat.Backend.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Services
@@ -11,17 +12,34 @@ namespace Backend.Services
         private readonly ILogger<MedicineService> _logger;
         private readonly IMapper _mapper;
         private readonly IWebHostEnvironment _env;
+        private readonly IPricingService _pricingService;
 
-        public MedicineService(PharmacyDbContext context, INotificationService notificationService, ILogger<MedicineService> logger, IMapper mapper, IWebHostEnvironment env)
+        public MedicineService(PharmacyDbContext context, INotificationService notificationService, ILogger<MedicineService> logger, IMapper mapper, IWebHostEnvironment env, IPricingService pricingService)
         {
             _context = context;
             _notificationService = notificationService;
             _logger = logger;
             _mapper = mapper;
             _env = env;
+            _pricingService = pricingService;
         }
 
-        public async Task<IEnumerable<MedicineDto>> GetAllAsync(string? name, decimal? minPrice, decimal? maxPrice, bool includeHidden = true)
+        /// <summary>
+        /// Maps to a DTO, attaching purchase cost and markup only when the caller is
+        /// permitted to see them. Supplier cost is Admin-only.
+        /// </summary>
+        private MedicineDto ToDto(Medicine medicine, bool includeCost)
+        {
+            var dto = _mapper.Map<MedicineDto>(medicine);
+            if (includeCost)
+            {
+                dto.CostPrice = medicine.CostPrice;
+                dto.MarkupPercent = _pricingService.CalculateMarkupPercent(medicine.CostPrice, medicine.Price);
+            }
+            return dto;
+        }
+
+        public async Task<IEnumerable<MedicineDto>> GetAllAsync(string? name, decimal? minPrice, decimal? maxPrice, bool includeHidden = true, int? page = null, int? pageSize = null, bool includeCost = false)
         {
             var query = _context.Medicines.AsQueryable().AsNoTracking();
 
@@ -36,14 +54,28 @@ namespace Backend.Services
             if (maxPrice.HasValue)
                 query = query.Where(m => m.Price <= maxPrice.Value);
 
+            // Paging is opt-in so existing callers that want the whole catalogue
+            // (the Admin dashboard) keep working unchanged.
+            if (page.HasValue || pageSize.HasValue)
+            {
+                var effectivePage = Math.Max(page ?? 1, 1);
+                var effectivePageSize = Math.Clamp(pageSize ?? 20, 1, 200);
+
+                // Skip/Take requires a deterministic order.
+                query = query
+                    .OrderBy(m => m.Id)
+                    .Skip((effectivePage - 1) * effectivePageSize)
+                    .Take(effectivePageSize);
+            }
+
             var list = await query.ToListAsync();
-            return _mapper.Map<IEnumerable<MedicineDto>>(list);
+            return list.Select(m => ToDto(m, includeCost)).ToList();
         }
 
-        public async Task<MedicineDto?> GetByIdAsync(int id)
+        public async Task<MedicineDto?> GetByIdAsync(int id, bool includeCost = false)
         {
             var m = await _context.Medicines.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-            return _mapper.Map<MedicineDto?>(m);
+            return m == null ? null : ToDto(m, includeCost);
         }
 
         public async Task<MedicineDto> CreateAsync(CreateMedicineDto dto)
@@ -63,16 +95,7 @@ namespace Backend.Services
 
             if (dto.Image != null && dto.Image.Length > 0)
             {
-                var uploads = Path.Combine(_env.WebRootPath, "images", "medicines");
-                Directory.CreateDirectory(uploads);
-
-                var fileName = Guid.NewGuid() + Path.GetExtension(dto.Image.FileName);
-                var filePath = Path.Combine(uploads, fileName);
-
-                using var stream = new FileStream(filePath, FileMode.Create);
-                await dto.Image.CopyToAsync(stream);
-
-                imagePath = "/images/medicines/" + fileName;
+                imagePath = await SaveImageAsync(dto.Image);
             }
 
             var medicine = new Medicine
@@ -90,7 +113,8 @@ namespace Backend.Services
             // persist notification + broadcast via notification service
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Created, medicine, AppRole.Admin);
 
-            return _mapper.Map<MedicineDto>(medicine);
+            // Create/update/visibility/rename are Admin-only endpoints, so cost is safe to return.
+            return ToDto(medicine, includeCost: true);
         }
 
         public async Task<MedicineDto?> UpdateAsync(int id, UpdateMedicineDto dto)
@@ -98,10 +122,10 @@ namespace Backend.Services
             // Debug logging
             _logger.LogInformation("UpdateAsync called for id={Id} with CategoryId={CategoryId}, HasImage={HasImage}",
                 id, dto.CategoryId, dto.Image != null);
-            
+
             var medicine = await _context.Medicines.FindAsync(id);
             if (medicine == null)
-                throw new Exception("Medicine not found");
+                throw new KeyNotFoundException($"Medicine with id {id} not found.");
 
             // Handle CategoryId - if HasValue and > 0, validate and set; otherwise set to null
             if (dto.CategoryId.HasValue && dto.CategoryId.Value > 0)
@@ -137,15 +161,15 @@ namespace Backend.Services
             // Handle image upload
             if (dto.Image != null && dto.Image.Length > 0)
             {
-                _logger.LogInformation("Processing image upload: {FileName}, Size: {Size} bytes", 
+                _logger.LogInformation("Processing image upload: {FileName}, Size: {Size} bytes",
                     dto.Image.FileName, dto.Image.Length);
-                    
+
                 // Delete old image first
                 if (!string.IsNullOrEmpty(medicine.Image))
                 {
                     var oldPath = Path.Combine(_env.WebRootPath, medicine.Image.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
                     _logger.LogInformation("Attempting to delete old image: {OldPath}", oldPath);
-                    
+
                     if (File.Exists(oldPath))
                     {
                         File.Delete(oldPath);
@@ -153,19 +177,7 @@ namespace Backend.Services
                     }
                 }
 
-                // Save new image
-                var uploads = Path.Combine(_env.WebRootPath, "images", "medicines");
-                Directory.CreateDirectory(uploads);
-
-                var fileName = Guid.NewGuid() + Path.GetExtension(dto.Image.FileName);
-                var filePath = Path.Combine(uploads, fileName);
-
-                _logger.LogInformation("Saving new image to: {FilePath}", filePath);
-                
-                using var stream = new FileStream(filePath, FileMode.Create);
-                await dto.Image.CopyToAsync(stream);
-
-                medicine.Image = "/images/medicines/" + fileName;
+                medicine.Image = await SaveImageAsync(dto.Image);
                 _logger.LogInformation("Image saved successfully: {ImagePath}", medicine.Image);
             }
 
@@ -173,7 +185,58 @@ namespace Backend.Services
 
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Updated, medicine, AppRole.Admin);
 
-            return _mapper.Map<MedicineDto>(medicine);
+            return ToDto(medicine, includeCost: true);
+        }
+
+        // Uploaded files are served straight back out of wwwroot as static content, so an
+        // unrestricted upload is a stored-XSS vector (.html/.svg served same-origin) as well
+        // as a disk-fill risk. Extension and content type must both be on the allowlist, and
+        // the stored name is always a fresh GUID plus a canonical extension - never anything
+        // derived from the client-supplied filename.
+        private const long MaxImageBytes = 5 * 1024 * 1024;
+
+        private static readonly Dictionary<string, string> AllowedImageTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/jpeg"] = ".jpg",
+            ["image/pjpeg"] = ".jpg",
+            ["image/png"] = ".png",
+            ["image/webp"] = ".webp",
+            ["image/gif"] = ".gif",
+        };
+
+        private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".webp", ".gif"
+        };
+
+        private async Task<string> SaveImageAsync(IFormFile image)
+        {
+            if (image.Length > MaxImageBytes)
+                throw new InvalidOperationException($"Image exceeds the {MaxImageBytes / (1024 * 1024)} MB limit.");
+
+            var suppliedExtension = Path.GetExtension(image.FileName);
+            if (string.IsNullOrWhiteSpace(suppliedExtension) || !AllowedImageExtensions.Contains(suppliedExtension))
+                throw new InvalidOperationException($"Unsupported image type '{suppliedExtension}'. Allowed: {string.Join(", ", AllowedImageExtensions)}.");
+
+            if (!AllowedImageTypes.TryGetValue(image.ContentType ?? string.Empty, out var canonicalExtension))
+                throw new InvalidOperationException($"Unsupported image content type '{image.ContentType}'.");
+
+            var webRoot = _env.WebRootPath;
+            if (string.IsNullOrWhiteSpace(webRoot))
+                throw new InvalidOperationException("WebRootPath is not configured; cannot store uploaded images.");
+
+            var uploads = Path.Combine(webRoot, "images", "medicines");
+            Directory.CreateDirectory(uploads);
+
+            var fileName = Guid.NewGuid() + canonicalExtension;
+            var filePath = Path.Combine(uploads, fileName);
+
+            _logger.LogInformation("Saving image to: {FilePath}", filePath);
+
+            await using var stream = new FileStream(filePath, FileMode.CreateNew);
+            await image.CopyToAsync(stream);
+
+            return "/images/medicines/" + fileName;
         }
 
 
@@ -198,21 +261,21 @@ namespace Backend.Services
 
             return $"Medicine '{removedName}' (ID: {removedId}) was deleted successfully.";
         }
-        
+
         public async Task<List<Medicine>> SearchMedicinesAsync(string name, bool includeHidden = true)
         {
             // AsNoTracking for read-only search results
             var query = _context.Medicines
                 .AsNoTracking()
                 .Where(m => m.Name.Contains(name));
-            
+
             if (!includeHidden)
                 query = query.Where(m => !m.IsHidden);
-                
+
             return await query.ToListAsync();
         }
 
-        public async Task<List<MedicineDto>> GetByCategoryAsync(int categoryId, bool includeHidden = true)
+        public async Task<List<MedicineDto>> GetByCategoryAsync(int categoryId, bool includeHidden = true, bool includeCost = false)
         {
             // Check category exists (AsNoTracking for read-only check)
             var categoryExists = await _context.Categories
@@ -224,7 +287,7 @@ namespace Backend.Services
 
             // Get medicines - filter hidden if requested (projection eliminates need for AsNoTracking)
             var query = _context.Medicines.Where(m => m.CategoryId == categoryId);
-            
+
             if (!includeHidden)
                 query = query.Where(m => !m.IsHidden);
 
@@ -237,13 +300,14 @@ namespace Backend.Services
                     Quantity = m.Quantity,
                     Price = m.Price,
                     Image = m.Image,
-                    IsHidden = m.IsHidden
+                    IsHidden = m.IsHidden,
+                    CategoryId = m.CategoryId,
+                    // Cost is Admin-only; the projection sets it conditionally.
+                    CostPrice = includeCost ? m.CostPrice : (decimal?)null
                 })
                 .ToListAsync();
 
-            if (!medicines.Any())
-                throw new InvalidOperationException("No medicines found in this category");
-
+            // An existing category with no medicines is an empty result, not an error.
             return medicines;
         }
 
@@ -261,7 +325,7 @@ namespace Backend.Services
             // CRITICAL: Broadcast SignalR notification so Pharmacist dashboard updates immediately
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Updated, medicine, AppRole.Admin);
 
-            return _mapper.Map<MedicineDto>(medicine);
+            return ToDto(medicine, includeCost: true);
         }
 
         public async Task<MedicineDto> UpdateNameAsync(int id, string newName)
@@ -274,12 +338,12 @@ namespace Backend.Services
                 throw new KeyNotFoundException($"Medicine with id {id} not found.");
 
             var trimmedName = newName.Trim();
-            
+
             // Check for duplicate name (case-insensitive, excluding current medicine)
             var duplicateExists = await _context.Medicines
                 .AsNoTracking()
                 .AnyAsync(m => m.Id != id && m.Name.ToLower() == trimmedName.ToLower());
-            
+
             if (duplicateExists)
                 throw new InvalidOperationException($"A medicine with the name '{trimmedName}' already exists.");
 
@@ -292,8 +356,7 @@ namespace Backend.Services
             // Broadcast SignalR notification so other dashboards update immediately
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Updated, medicine, AppRole.Admin);
 
-            return _mapper.Map<MedicineDto>(medicine);
+            return ToDto(medicine, includeCost: true);
         }
     }
 }
-    

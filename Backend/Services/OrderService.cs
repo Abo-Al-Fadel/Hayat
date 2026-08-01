@@ -16,8 +16,15 @@ public class OrderService : IOrderService
 
     public async Task<(bool Success, string? Error, Order Order)> CreateOrderAsync(CheckoutDto dto)
     {
-        if (dto.Items == null || !dto.Items.Any())
+        if (dto.Items == null || dto.Items.Count == 0)
             return (false, "Order must contain at least one item.", null!);
+
+        // Merge repeated lines for the same medicine so stock math and low-stock
+        // alerts each run exactly once per medicine.
+        var requestedItems = dto.Items
+            .GroupBy(i => i.MedicineId)
+            .Select(g => new { MedicineId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToList();
 
         var order = new Order
         {
@@ -27,57 +34,78 @@ public class OrderService : IOrderService
         };
 
         decimal total = 0;
-        
+
         // Track medicines that may hit low stock threshold
         var lowStockChecks = new List<(Medicine Medicine, int PreviousQty, int SoldQty)>();
 
-        foreach (var item in dto.Items)
-        {
-            var medicine = await _context.Medicines.FindAsync(item.MedicineId);
-            if (medicine == null)
-                return (false, $"Medicine with ID {item.MedicineId} not found.", null!);
-            if (medicine.Quantity < item.Quantity)
-                return (false, $"Not enough stock for {medicine.Name}", null!);
+        await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            // Capture previous quantity BEFORE deduction for low stock detection
-            int previousQty = medicine.Quantity;
-            medicine.Quantity -= item.Quantity;
-            
-            // Track for low stock alert (only check after successful order)
-            lowStockChecks.Add((medicine, previousQty, item.Quantity));
+        foreach (var item in requestedItems)
+        {
+            var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.Id == item.MedicineId);
+            if (medicine == null)
+            {
+                await transaction.RollbackAsync();
+                return (false, $"Medicine with ID {item.MedicineId} not found.", null!);
+            }
+
+            // Conditional decrement executed as a single UPDATE ... WHERE Quantity >= n.
+            // Two concurrent checkouts therefore cannot both pass the stock check and
+            // oversell; the loser gets 0 rows affected and is rejected.
+            var quantity = item.Quantity;
+            var rowsAffected = await _context.Medicines
+                .Where(m => m.Id == item.MedicineId && m.Quantity >= quantity)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(m => m.Quantity, m => m.Quantity - quantity));
+
+            if (rowsAffected == 0)
+            {
+                await transaction.RollbackAsync();
+                return (false, $"Not enough stock for {medicine.Name}", null!);
+            }
+
+            // ExecuteUpdate bypasses the change tracker, so refresh to read the true
+            // post-decrement quantity rather than trusting the pre-read value.
+            await _context.Entry(medicine).ReloadAsync();
+            var previousQty = medicine.Quantity + quantity;
+
+            lowStockChecks.Add((medicine, previousQty, quantity));
 
             order.Items.Add(new OrderItem
             {
                 MedicineId = medicine.Id,
-                Quantity = item.Quantity,
-                Price = medicine.Price
+                Quantity = quantity,
+                Price = medicine.Price,
+                // Snapshot the cost so gross profit for this sale stays accurate even
+                // after the medicine's weighted-average cost changes later.
+                CostPrice = medicine.CostPrice
             });
 
-            total += medicine.Price * item.Quantity;
+            total += medicine.Price * quantity;
         }
 
         order.TotalPrice = total;
 
         _context.Orders.Add(order);
         await _context.SaveChangesAsync();
-        
+        await transaction.CommitAsync();
+
         // 1. SILENT STOCK UPDATE - Admin sees updated stock immediately (NO notification)
         foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
         {
             await _notificationService.NotifyMedicineStockUpdatedAsync(
-                medicine.Id, 
-                medicine.Name, 
-                medicine.Quantity, 
+                medicine.Id,
+                medicine.Name,
+                medicine.Quantity,
                 soldQty
             );
         }
-        
+
         // 2. LOW STOCK ALERTS - Check each medicine for threshold crossing
         foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
         {
             await _notificationService.NotifyLowStockAlertAsync(medicine, previousQty, soldQty);
         }
-        
+
         // NOTE: NotifyOrderCreatedAsync is now a no-op - Admin doesn't receive sale notifications
 
         return (true, null, order);
@@ -185,7 +213,20 @@ public class OrderService : IOrderService
             return (false, "Order not found.");
 
         if (!order.Items.Any())
-        return (false, "Order has no items and cannot be deleted.");
+            return (false, "Order has no items and cannot be deleted.");
+
+        // Return the sold units to inventory - cancelling a sale means the stock was
+        // never actually sold. Mirrors RemoveOrderItemAsync, which restores per item.
+        var medicineIds = order.Items.Select(i => i.MedicineId).Distinct().ToList();
+        var medicines = await _context.Medicines
+            .Where(m => medicineIds.Contains(m.Id))
+            .ToDictionaryAsync(m => m.Id);
+
+        foreach (var item in order.Items)
+        {
+            if (medicines.TryGetValue(item.MedicineId, out var medicine))
+                medicine.Quantity += item.Quantity;
+        }
 
         order.Status = OrderStatus.Cancelled;
         order.TotalPrice = 0;

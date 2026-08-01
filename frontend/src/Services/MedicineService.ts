@@ -81,18 +81,6 @@ const buildMedicineFormData = (data: MedicineCreateInput | MedicineUpdateInput):
     formData.append("Image", data.imageFile, data.imageFile.name);
   }
   
-  // Debug logging (remove in production)
-  if (process.env.NODE_ENV === "development") {
-    console.log("FormData entries:");
-    formData.forEach((value, key) => {
-      if (value instanceof File) {
-        console.log(`  ${key}: [File] ${value.name} (${value.size} bytes)`);
-      } else {
-        console.log(`  ${key}: ${value}`);
-      }
-    });
-  }
-  
   return formData;
 };
 
@@ -135,9 +123,9 @@ export const getMedicineById = async (id: number): Promise<Medicine> => {
   return res.data;
 };
 
-// SEARCH medicines
+// SEARCH medicines - backend binds the term to "name", not "query"
 export const searchMedicines = async (query?: string): Promise<Medicine[]> => {
-  const params = query ? `?query=${encodeURIComponent(query)}` : "";
+  const params = query ? `?name=${encodeURIComponent(query)}` : "";
   const res = await api.get(`/api/Medicine/search${params}`);
   return res.data;
 };

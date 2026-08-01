@@ -1,5 +1,5 @@
 // Controllers/MedicineController.cs
-using Hayaa.Backend.Dtos.Medicine;
+using Hayat.Backend.Dtos.Medicine;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,10 +18,15 @@ public class MedicineController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = "Admin,Pharmacist")]
-    public async Task<IActionResult> GetAll([FromQuery] string? name, [FromQuery] decimal? minPrice, [FromQuery] decimal? maxPrice)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? name,
+        [FromQuery] decimal? minPrice,
+        [FromQuery] decimal? maxPrice,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize)
     {
         var isAdmin = User.IsInRole("Admin");
-        var meds = await _medicineService.GetAllAsync(name, minPrice, maxPrice, includeHidden: isAdmin);
+        var meds = await _medicineService.GetAllAsync(name, minPrice, maxPrice, includeHidden: isAdmin, page: page, pageSize: pageSize, includeCost: isAdmin);
         return Ok(meds);
     }
 
@@ -29,7 +34,7 @@ public class MedicineController : ControllerBase
     [Authorize(Roles = "Admin,Pharmacist")]
     public async Task<IActionResult> GetById(int id)
     {
-        var med = await _medicineService.GetByIdAsync(id);
+        var med = await _medicineService.GetByIdAsync(id, includeCost: User.IsInRole("Admin"));
         if (med == null) return NotFound();
         return Ok(med);
     }
@@ -41,8 +46,16 @@ public class MedicineController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var created = await _medicineService.CreateAsync(dto);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        try
+        {
+            var created = await _medicineService.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Rejected image upload (type, content type, or size).
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpPut("{id}")]
@@ -51,9 +64,21 @@ public class MedicineController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var updated = await _medicineService.UpdateAsync(id, dto);
-        if (updated == null) return NotFound();
-        return Ok(updated);
+        try
+        {
+            var updated = await _medicineService.UpdateAsync(id, dto);
+            if (updated == null) return NotFound();
+            return Ok(updated);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Rejected image upload (type, content type, or size).
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -73,11 +98,11 @@ public class MedicineController : ControllerBase
 
     [HttpGet("search")]
     [Authorize(Roles = "Admin,Pharmacist")]
-    public async Task<IActionResult> Search(string name)
+    public async Task<IActionResult> Search([FromQuery] string? name)
     {
         var isAdmin = User.IsInRole("Admin");
-        var medicines = await _medicineService.SearchMedicinesAsync(name, includeHidden: isAdmin);
-        if (medicines.Count == 0) return NotFound("No medicines found");
+        var medicines = await _medicineService.SearchMedicinesAsync(name ?? string.Empty, includeHidden: isAdmin);
+        // "No match" is an empty result set, not a 404.
         return Ok(medicines);
     }
     [HttpGet("by-category/{categoryId}")]
@@ -87,20 +112,13 @@ public class MedicineController : ControllerBase
         try
         {
             var isAdmin = User.IsInRole("Admin");
-            var medicines = await _medicineService.GetByCategoryAsync(categoryId, includeHidden: isAdmin);
+            var medicines = await _medicineService.GetByCategoryAsync(categoryId, includeHidden: isAdmin, includeCost: isAdmin);
+            // Always an array - an empty category returns [], never a different shape.
             return Ok(medicines);
         }
         catch (KeyNotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Ok(new
-            {
-                message = ex.Message,
-                data = new List<MedicineDto>()
-            });
         }
     }
 
