@@ -62,7 +62,6 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   // During logout, immediately redirect to prevent white screen
   // This catches the case where logout was triggered but navigate hasn't happened yet
   if (isLoggingOut) {
-    console.log("[ProtectedRoute] Logout in progress - redirecting to /login");
     return <Navigate to="/login" replace />;
   }
   
@@ -76,7 +75,6 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   // CHECK 1: No token = Not authenticated → Redirect to /login
   // ─────────────────────────────────────────────────────────────────────────
   if (!tokenExists) {
-    console.log(`[ProtectedRoute] No token - redirecting to /login from ${location.pathname}`);
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
@@ -84,7 +82,6 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   // CHECK 2: Token exists but no user data → Redirect to /login
   // ─────────────────────────────────────────────────────────────────────────
   if (!effectiveUser) {
-    console.log(`[ProtectedRoute] Token exists but no user data - redirecting to /login from ${location.pathname}`);
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
@@ -96,7 +93,6 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
     const allowedLower = allowedRoles.map(r => r.toLowerCase());
     
     if (!allowedLower.includes(userRole)) {
-      console.log(`[ProtectedRoute] Role mismatch: '${userRole}' not in [${allowedLower.join(", ")}] - redirecting to /login from ${location.pathname}`);
       return (
         <Navigate 
           to="/login" 
@@ -114,7 +110,6 @@ const ProtectedRoute: React.FC<Props> = ({ children, allowedRoles }) => {
   // ─────────────────────────────────────────────────────────────────────────
   // ALL CHECKS PASSED → Render children
   // ─────────────────────────────────────────────────────────────────────────
-  console.log(`[ProtectedRoute] Access granted to ${location.pathname} for role '${effectiveUser.role}'`);
   return children;
 };
 

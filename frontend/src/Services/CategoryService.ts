@@ -12,9 +12,7 @@ export interface Category {
 
 // GET all categories - with explicit logging
 export const getCategories = async (): Promise<Category[]> => {
-  console.log("[API] GET /api/Categories - requesting...");
   const response = await api.get("/api/Categories");
-  console.log("[API] GET /api/Categories - status:", response.status, "count:", response.data?.length);
   return response.data;
 };
 

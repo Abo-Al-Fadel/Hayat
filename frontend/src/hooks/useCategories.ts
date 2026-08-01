@@ -44,7 +44,6 @@ export function useCategories() {
     // Check token from localStorage (shared across tabs)
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
-      console.log("[Categories] No token in localStorage, skipping fetch");
       setError("Not authenticated");
       return;
     }
@@ -57,11 +56,9 @@ export function useCategories() {
     setLoading(true);
     setError(null);
     
-    console.log("[Categories] Fetching from API...");
     
     try {
       const data = await getCategories();
-      console.log("[Categories] API response count:", data.length);
       setCategories(data);
       // Cache for next load
       localStorage.setItem(CATEGORIES_CACHE_KEY, JSON.stringify(data));
@@ -81,7 +78,6 @@ export function useCategories() {
    * This is the SINGLE SOURCE OF TRUTH for category state changes
    */
   const handleCategoryChanged = useCallback((payload: { id: number; name: string; action: string }) => {
-    console.log("[Categories] SignalR CategoryChanged:", payload);
     
     setCategories((prev) => {
       let updated: Category[];

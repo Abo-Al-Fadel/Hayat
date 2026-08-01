@@ -1,6 +1,6 @@
 import React from "react";
 import logo from "../Images/medicine-bottle.png";
-import hayaa from "../Images/HTL.png";
+import hayat from "../Images/HTL.png";
 import "./Home.css";
 import leaf from "../Images/leaf.png";
 import { FaSignOutAlt, FaUserCircle as FaUserCircleRaw } from "react-icons/fa";
@@ -38,10 +38,7 @@ const Home = (props: Props) => {
     navigate("/login");
   };
   const handleLogout = () => {
-    console.log("[AUTH] Logout initiated");
     logout();
-    console.log("[AUTH] Token cleared");
-    console.log("[AUTH] Redirected to /login");
     navigate("/login", { replace: true });
   };
 
@@ -51,7 +48,7 @@ const Home = (props: Props) => {
       <header className="relative z-20 flex items-center justify-between py-6">
         {/* Logo + Name */}
         <div className="flex items-center gap-3 pl-4 md:pl-8">
-          <img src={hayaa} alt="Hayaa" className="h-10 w-10 object-contain" />
+          <img src={hayat} alt="Hayat" className="h-10 w-10 object-contain" />
           <span
             className="exported-logo"
             style={{
@@ -62,7 +59,7 @@ const Home = (props: Props) => {
               transform: "translateY(4px)",
             }}
           >
-            Hayaa
+            Hayat
           </span>
         </div>
 

@@ -276,7 +276,6 @@ export const getSupplyStocks = async (): Promise<SupplyStock[]> => {
   
   // Debug logging - can be removed in production
   if (process.env.NODE_ENV === 'development') {
-    console.log("[SupplyOrderService] Fetched supply orders:", response.data?.length || 0);
     // Check for data issues
     const issues: string[] = [];
     response.data?.forEach((order: any) => {
@@ -299,11 +298,6 @@ export const getSupplyStocks = async (): Promise<SupplyStock[]> => {
  */
 export const getSupplyStocksForStorageManager = async (): Promise<SupplyStock[]> => {
   const response = await api.get("/api/SupplyOrder/storage-manager");
-  
-  if (process.env.NODE_ENV === 'development') {
-    console.log("[SupplyOrderService] Fetched storage manager orders:", response.data?.length || 0);
-  }
-  
   return response.data.map(normalizeSupplyStock);
 };
 

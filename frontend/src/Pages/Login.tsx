@@ -9,8 +9,8 @@
  * - Log all auth events
  */
 import React, { useState, useRef, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import hayaa from "../Images/HL.png";
+import { useNavigate, useLocation } from "react-router-dom";
+import hayat from "../Images/HL.png";
 import "./Login.css";
 import { useAuth } from "../Context/AuthContext";
 import Spinner from "../Components/Spinner/Spinner";
@@ -50,7 +50,6 @@ const Login: React.FC = () => {
     if (isAuthenticated && user && !hasRedirectedRef.current) {
       hasRedirectedRef.current = true;
       const role = user.role.toLowerCase();
-      console.log(`[Login] Already authenticated as ${role}, redirecting`);
       
       if (role === "admin") navigate("/admin", { replace: true });
       else if (role === "pharmacist") navigate("/pharmacist", { replace: true });
@@ -68,7 +67,6 @@ const Login: React.FC = () => {
       const loggedUser = await login(username.trim(), password);
       const role = loggedUser.role.toLowerCase();
       
-      console.log(`[Login] Login success - role: ${role}`);
 
       // Single redirect with replace
       if (role === "admin") navigate("/admin", { replace: true });
@@ -97,7 +95,7 @@ const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-loginpage bg-cover bg-center">
       <div className="bg-white/5 backdrop-blur-md shadow-xl rounded-xl w-full max-w-md p-10">
         <div className="flex justify-center mb-6">
-          <img src={hayaa} alt="Hayaa" className="h-20 w-20 object-contain" />
+          <img src={hayat} alt="Hayat" className="h-20 w-20 object-contain" />
         </div>
 
         <h2 className="text-3xl font-bold text-white text-center mb-6">Sign In</h2>
@@ -145,10 +143,11 @@ const Login: React.FC = () => {
           </button>
         </form>
 
+        {/* Password reset is not implemented (no /forgot-password route and no
+            server endpoint), so we tell users what to do instead of linking to a
+            dead page. Restore a link here once the flow exists. */}
         <div className="mt-4 text-center text-white/70 text-sm">
-          <Link to="/forgot-password" className="hover:text-white">
-            Forgot Password?
-          </Link>
+          Forgot your password? Ask an administrator to reset it.
         </div>
       </div>
     </div>

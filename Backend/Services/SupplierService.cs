@@ -35,7 +35,7 @@ public class SupplierService : ISupplierService
         supplier.Email = dto.Email;
 
         await _context.SaveChangesAsync();
-        
+
         return new SupplierDto
         {
             Id = supplier.Id,

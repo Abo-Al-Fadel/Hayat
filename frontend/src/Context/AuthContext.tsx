@@ -59,9 +59,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedUser = JSON.parse(storedUser) as User;
         setToken(storedToken);
         setUser(parsedUser);
-        console.log(`[Auth] Token read from localStorage — user: ${parsedUser.username} — role: ${parsedUser.role}`);
-      } else {
-        console.log("[Auth] No session found in localStorage");
       }
     } catch (err) {
       console.error("[Auth] Failed to parse session, clearing:", err);
@@ -78,13 +75,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (e.key === TOKEN_KEY) {
         if (e.newValue === null) {
           // Token was removed (logout from another tab)
-          console.log("[Auth] Logout detected from another tab, redirecting to /login");
           setToken(null);
           setUser(null);
           window.location.href = "/login";
         } else if (e.newValue !== token) {
           // Token was changed (login from another tab)
-          console.log("[Auth] Token changed from another tab, syncing...");
           setToken(e.newValue);
           const storedUser = localStorage.getItem(USER_KEY);
           if (storedUser) {
@@ -122,7 +117,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(res.token);
     setUser(mappedUser);
     
-    console.log(`[Auth] Login success — role: ${mappedUser.role} — token stored in localStorage`);
     
     return mappedUser;
   }, []);
@@ -132,7 +126,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(() => {
     // Prevent re-entry during logout
     if (isLoggingOutRef.current) {
-      console.log("[Auth] Logout already in progress, blocking duplicate");
       return;
     }
     
@@ -140,14 +133,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoggingOutRef.current = true;
     setIsLoggingOut(true);
     
-    console.log("[Auth] ============================================");
-    console.log("[Auth] LOGOUT INITIATED");
     
     // CRITICAL: Stop ALL SignalR connections BEFORE clearing auth
     stopAllSignalRConnections();
-    console.log("[Auth] SignalR connections stopped");
     
-    console.log("[Auth] token removed");
     
     // Clear React state SYNCHRONOUSLY
     setToken(null);
@@ -161,8 +150,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("categories_cache");
     localStorage.removeItem("products");
     
-    console.log("[Auth] Storage cleared");
-    console.log("[Auth] ============================================");
     
     // Reset flag after a brief delay (to prevent rapid re-login issues)
     setTimeout(() => {

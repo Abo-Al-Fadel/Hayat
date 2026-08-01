@@ -27,11 +27,9 @@ export function Sidebar({ title, items, activePage, onNavigate }: SidebarProps) 
   };
 
   const handleLogout = () => {
-    console.log("[Sidebar] Logout clicked");
     // 1. Clear auth state and localStorage via AuthContext
     logout();
     // 2. Navigate to login AFTER auth is cleared
-    console.log("[Auth] redirecting to /login");
     navigate("/login", { replace: true });
   };
 
@@ -42,7 +40,7 @@ export function Sidebar({ title, items, activePage, onNavigate }: SidebarProps) 
         onClick={handleLogoClick}
         title="Go to Homepage"
       >
-        <img src={logo} alt="Hayaa Logo" className="h-10 w-auto" />
+        <img src={logo} alt="Hayat Logo" className="h-10 w-auto" />
         <h2 className="text-lg font-bold text-gray-800 dark:text-gray-200">{title}</h2>
       </div>
 

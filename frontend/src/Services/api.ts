@@ -23,11 +23,8 @@ api.interceptors.request.use((config) => {
   
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    console.log(`[API] Authorization header present: YES`);
-  } else {
-    console.log(`[API] Authorization header present: NO`);
   }
-  
+
   return config;
 });
 

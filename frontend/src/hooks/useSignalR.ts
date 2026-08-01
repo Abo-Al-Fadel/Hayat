@@ -40,7 +40,6 @@ interface SignalRHandlers {
 
 export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
   const handlersRef = useRef(handlers);
-  const componentIdRef = useRef(Math.random().toString(36).substring(7));
   const isInitializedRef = useRef(false);
 
   // Keep handlers ref updated with latest closures
@@ -62,17 +61,11 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
   }, []);
 
   useEffect(() => {
-    // Capture ref values at effect start for cleanup
-    const componentId = componentIdRef.current;
-    
     // Prevent double initialization in React StrictMode
     if (isInitializedRef.current) {
-      console.log(`[SignalR] Component ${componentId} already initialized, skipping`);
       return;
     }
     isInitializedRef.current = true;
-    
-    console.log(`[SignalR] Component ${componentId} initializing for ${hubPath}`);
 
     const initConnection = async () => {
       const token = getToken();
@@ -85,7 +78,6 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
 
       // CASE 1: Connection exists and is connected - just increment refCount
       if (store && store.connection.state === signalR.HubConnectionState.Connected) {
-        console.log(`[SignalR] Reusing existing connection for ${hubPath} (refCount: ${store.refCount + 1})`);
         store.refCount++;
         
         // Register any new events that this component needs
@@ -100,14 +92,11 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
 
       // CASE 2: Connection exists but not connected - wait for it or let it reconnect
       if (store && store.connection.state === signalR.HubConnectionState.Connecting) {
-        console.log(`[SignalR] Connection is starting, incrementing refCount`);
         store.refCount++;
         return;
       }
 
       // CASE 3: No connection - create new one
-      console.log("[SignalR] ============================================");
-      console.log(`[SignalR] Creating NEW connection to ${API_BASE}${hubPath}`);
 
       const connection = new signalR.HubConnectionBuilder()
         .withUrl(`${API_BASE}${hubPath}`, {
@@ -137,7 +126,6 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
       });
 
       connection.onclose((err) => {
-        console.log(`[SignalR] Connection closed for ${hubPath}`);
         if (err) console.warn(`[SignalR] Close error:`, err);
       });
 
@@ -146,14 +134,10 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
       });
 
       connection.onreconnected((newId) => {
-        console.log(`[SignalR] Reconnected ${hubPath} (server: ${newId})`);
       });
 
       try {
         await connection.start();
-        console.log(`[SignalR] Connected to ${hubPath}`);
-        console.log(`[SignalR] Connection state: ${connection.state}`);
-        console.log("[SignalR] ============================================");
       } catch (err) {
         console.error(`[SignalR] Connection failed for ${hubPath}:`, err);
         connectionStore.delete(hubPath);
@@ -164,11 +148,9 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
 
     // Cleanup: decrement refCount, keep connection alive
     return () => {
-      console.log(`[SignalR] Component ${componentId} cleanup`);
       const store = connectionStore.get(hubPath);
       if (store) {
         store.refCount = Math.max(0, store.refCount - 1);
-        console.log(`[SignalR] RefCount for ${hubPath}: ${store.refCount}`);
       }
       isInitializedRef.current = false;
     };
@@ -192,7 +174,6 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
   const stopConnection = useCallback(async () => {
     const store = connectionStore.get(hubPath);
     if (store?.connection) {
-      console.log(`[SignalR] Manually stopping connection for ${hubPath}`);
       await store.connection.stop().catch(() => {});
       connectionStore.delete(hubPath);
       handlerRegistry.delete(hubPath);
@@ -207,13 +188,8 @@ export function useSignalR(hubPath: string, handlers: SignalRHandlers) {
  * This function is called ONCE per event name, regardless of re-renders
  */
 function registerEventListener(connection: signalR.HubConnection, hubPath: string, eventName: string) {
-  console.log(`[SignalR] Registering listener for event: ${eventName}`);
   
   connection.on(eventName, (payload: any) => {
-    console.log(`[SignalR] ============================================`);
-    console.log(`[SignalR] Event received: ${eventName}`);
-    console.log(`[SignalR] Payload:`, JSON.stringify(payload, null, 2));
-    console.log(`[SignalR] ============================================`);
     
     // Get the CURRENT handler from registry (always fresh, no stale closures)
     const eventHandlers = handlerRegistry.get(hubPath);
@@ -222,7 +198,6 @@ function registerEventListener(connection: signalR.HubConnection, hubPath: strin
     if (handler) {
       try {
         handler(payload);
-        console.log(`[SignalR] Handler executed for ${eventName}`);
       } catch (err) {
         console.error(`[SignalR] Handler error for ${eventName}:`, err);
       }
@@ -236,13 +211,10 @@ function registerEventListener(connection: signalR.HubConnection, hubPath: strin
  * Stop ALL SignalR connections - call this on logout
  */
 export function stopAllSignalRConnections() {
-  console.log("[SignalR] ============================================");
-  console.log("[SignalR] Stopping ALL connections (logout)");
   
   connectionStore.forEach(async (store, hubPath) => {
     try {
       await store.connection.stop();
-      console.log(`[SignalR] Stopped connection: ${hubPath}`);
     } catch (err) {
       console.warn(`[SignalR] Error stopping ${hubPath}:`, err);
     }
@@ -251,6 +223,4 @@ export function stopAllSignalRConnections() {
   connectionStore.clear();
   handlerRegistry.clear();
   
-  console.log("[SignalR] All connections stopped");
-  console.log("[SignalR] ============================================");
 }

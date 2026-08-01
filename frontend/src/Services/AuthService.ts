@@ -24,7 +24,6 @@ export const loginAPI = async (username: string, password: string): Promise<Logi
 
   const data = response.data;
   
-  console.log("[API] Login response received, token present:", !!data.token);
 
   // Backend returns: { token, user: { id, username, email, role } }
   return {

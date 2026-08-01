@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 import logoDark from "../Images/HTL.png";
-import logoLight from "../Images/hayaaLogo.png";
+import logoLight from "../Images/hayatLogo.png";
 import * as signalR from "@microsoft/signalr";
 
 import {
@@ -143,6 +143,11 @@ const ProductCard = React.memo(({
       <button
         onClick={() => onAddToCart(product)}
         disabled={product.quantity === 0}
+        aria-label={
+          product.quantity === 0
+            ? `${product.name} is out of stock`
+            : `Add ${product.name} to cart`
+        }
         className={`w-full border px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
           product.quantity === 0
             ? "border-gray-400 text-gray-400 cursor-not-allowed"
@@ -213,9 +218,7 @@ const PharmacistDashboard: React.FC = () => {
 
   // Log mount for debugging
   useEffect(() => {
-    console.log(`[Pharmacist] Dashboard mounted`);
     return () => {
-      console.log(`[Pharmacist] Dashboard unmounting`);
     };
   }, []);
 
@@ -551,7 +554,6 @@ const PharmacistDashboard: React.FC = () => {
     // CategoryChanged - real-time category sync
     // This is the SINGLE SOURCE OF TRUTH for category state changes
     const onCategoryChanged = (payload: any) => {
-      console.log("[Pharmacist] CategoryChanged received:", payload);
       const { id, name, action } = payload;
       
       setCategories(prev => {
@@ -776,7 +778,6 @@ const PharmacistDashboard: React.FC = () => {
     
     // Skip if logging out
     if (isLoggingOutRef.current) {
-      console.log("[API] fetchOrders canceled - logout in progress");
       return;
     }
     
@@ -784,7 +785,6 @@ const PharmacistDashboard: React.FC = () => {
       setOrdersLoading(true);
       const token = sessionStorage.getItem("token") || localStorage.getItem("token");
       if (!token) {
-        console.log("[API] fetchOrders skipped - no token");
         return;
       }
 
@@ -828,14 +828,12 @@ const PharmacistDashboard: React.FC = () => {
   const fetchInvoice = async (orderId: number) => {
     // Skip if logging out
     if (isLoggingOutRef.current) {
-      console.log("[API] fetchInvoice canceled - logout in progress");
       return null;
     }
     
     try {
       const token = sessionStorage.getItem("token") || localStorage.getItem("token");
       if (!token) {
-        console.log("[API] fetchInvoice skipped - no token");
         return null;
       }
       const res = await fetch(`${API_BASE}/api/Order/${orderId}/invoice`, {
@@ -900,17 +898,14 @@ const PharmacistDashboard: React.FC = () => {
   const handleLogout = async () => {
     // CRITICAL: Set flag FIRST to prevent any API calls
     if (isLoggingOutRef.current) {
-      console.log("[AUTH] Logout already in progress, blocking duplicate");
       return;
     }
     isLoggingOutRef.current = true;
     
-    console.log("[AUTH] Logout initiated");
     
     // 1. Stop SignalR connection first
     try {
       await stopConnection();
-      console.log("[SignalR] Disconnected: manual logout");
     } catch (e) {
       // Ignore errors
     }
@@ -918,8 +913,6 @@ const PharmacistDashboard: React.FC = () => {
     // 2. Use AuthContext logout to clear state and sessionStorage
     authLogout();
     
-    console.log("[AUTH] Token cleared");
-    console.log("[AUTH] Redirected to /login");
     
     // 3. Navigate to login with replace (ONCE)
     navigate("/login", { replace: true });
@@ -984,7 +977,6 @@ const PharmacistDashboard: React.FC = () => {
   const handleCheckout = async () => {
     // Skip if logging out
     if (isLoggingOutRef.current) {
-      console.log("[API] handleCheckout canceled - logout in progress");
       return;
     }
     
@@ -995,7 +987,6 @@ const PharmacistDashboard: React.FC = () => {
     try {
       const token = sessionStorage.getItem("token") || localStorage.getItem("token");
       if (!token) {
-        console.log("[API] handleCheckout skipped - no token");
         return;
       }
       setCheckoutLoading(true);

@@ -6,6 +6,7 @@ import Login from "../Pages/Login";
 import AdminDashboard from "../Pages/AdminDashboard";
 import PharmacistDashboard from "../Pages/PharmacistDashboard";
 import StorageManagerDashboard from "../Pages/StorageManagerDashboard";
+import NotFound from "../Pages/NotFound";
 import ProtectedRoute from "./ProtectedRoute";
 
 export const router = createBrowserRouter([
@@ -45,6 +46,10 @@ export const router = createBrowserRouter([
           </ProtectedRoute>
         ),
       },
+
+      // Catch-all: anything unmatched renders our own 404 rather than
+      // react-router's built-in error screen.
+      { path: "*", element: <NotFound /> },
     ],
   },
 ]);

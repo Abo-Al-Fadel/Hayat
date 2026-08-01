@@ -112,15 +112,15 @@ public class UserService : IUserService
         var currentRole = currentRoles.FirstOrDefault() ?? "None";
 
         // Self-demotion check: Admin cannot remove their own Admin role
-        if (userId == currentUserId && 
-            currentRole.Equals("Admin", StringComparison.OrdinalIgnoreCase) && 
+        if (userId == currentUserId &&
+            currentRole.Equals("Admin", StringComparison.OrdinalIgnoreCase) &&
             !newRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("You cannot remove your own Admin role.");
         }
 
         // SECURITY: Prevent demoting the last Admin
-        if (currentRole.Equals("Admin", StringComparison.OrdinalIgnoreCase) && 
+        if (currentRole.Equals("Admin", StringComparison.OrdinalIgnoreCase) &&
             !newRole.Equals("Admin", StringComparison.OrdinalIgnoreCase))
         {
             var admins = await _userManager.GetUsersInRoleAsync("Admin");
@@ -142,7 +142,7 @@ public class UserService : IUserService
             var removeResult = await _userManager.RemoveFromRolesAsync(user, currentRoles);
             if (!removeResult.Succeeded)
             {
-                throw new Exception("Failed to remove current roles: " + 
+                throw new Exception("Failed to remove current roles: " +
                     string.Join(", ", removeResult.Errors.Select(e => e.Description)));
             }
         }
@@ -151,7 +151,7 @@ public class UserService : IUserService
         var addResult = await _userManager.AddToRoleAsync(user, newRole);
         if (!addResult.Succeeded)
         {
-            throw new Exception("Failed to assign new role: " + 
+            throw new Exception("Failed to assign new role: " +
                 string.Join(", ", addResult.Errors.Select(e => e.Description)));
         }
 
@@ -198,7 +198,7 @@ public class UserService : IUserService
         var result = await _userManager.UpdateAsync(user);
         if (!result.Succeeded)
         {
-            throw new Exception("Failed to update user: " + 
+            throw new Exception("Failed to update user: " +
                 string.Join(", ", result.Errors.Select(e => e.Description)));
         }
 

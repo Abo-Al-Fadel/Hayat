@@ -65,7 +65,6 @@ export function useProducts() {
       const token = localStorage.getItem(TOKEN_KEY);
       if (!token) {
         // No token - don't attempt API call, dashboard will redirect
-        console.log("[API] No token in localStorage, skipping products fetch");
         return;
       }
 
@@ -137,7 +136,6 @@ export function useProducts() {
         imageFile: input.imageFile ?? null,
       };
       
-      console.log("Creating medicine with input:", createInput);
       
       const created = await addMedicine(createInput);
       const mapped = toDisplayMedicine(created);
@@ -172,7 +170,6 @@ export function useProducts() {
         imageFile: input.imageFile ?? null,
       };
       
-      console.log("Updating medicine with input:", updateInput);
       
       const updated = await updateMedicine(id, updateInput);
       const mapped = toDisplayMedicine(updated);

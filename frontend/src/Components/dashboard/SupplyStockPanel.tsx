@@ -280,17 +280,6 @@ export function SupplyStockPanel({
       return;
     }
     
-    // Debug log to verify data from backend
-    console.log("[SupplyStockPanel] Opening edit form with stock data:", {
-      stockId: stock.id,
-      items: stock.items.map(i => ({
-        medicineId: i.medicineId,
-        medicineName: i.medicineName,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice
-      }))
-    });
-    
     setEditingStock(stock);
     setFormSupplierId(stock.supplierId);
     
