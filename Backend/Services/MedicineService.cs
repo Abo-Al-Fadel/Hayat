@@ -246,20 +246,39 @@ namespace Backend.Services
             if (m == null)
                 throw new KeyNotFoundException($"Medicine with id {id} not found.");
 
-            // SOFT DELETE: Mark as hidden instead of hard delete
-            // This preserves FK integrity with OrderItems, SupplyOrderItems, etc.
             var removedName = m.Name;
             var removedId = m.Id;
 
-            m.IsHidden = true;
-            await _context.SaveChangesAsync();
+            // A medicine that appears on a past sale or supply order cannot be removed
+            // without destroying that history, so those are archived (hidden) instead.
+            // Anything never referenced is genuinely deleted - previously EVERY delete
+            // was a soft delete, which made "Delete" indistinguishable from "Hide" and
+            // looked to the Admin like the deletion had not saved at all, because the
+            // Admin list includes hidden medicines.
+            var isReferenced =
+                await _context.OrderItems.AnyAsync(oi => oi.MedicineId == id) ||
+                await _context.SupplyOrderItems.AnyAsync(si => si.MedicineId == id);
 
-            _logger.LogInformation("Medicine {Id} '{Name}' soft-deleted (marked as hidden)", removedId, removedName);
+            string message;
+            if (isReferenced)
+            {
+                m.IsHidden = true;
+                message = $"'{removedName}' appears on past orders, so it was archived and hidden from sale rather than deleted.";
+                _logger.LogInformation("Medicine {Id} '{Name}' archived (referenced by existing orders)", removedId, removedName);
+            }
+            else
+            {
+                _context.Medicines.Remove(m);
+                message = $"Medicine '{removedName}' was deleted.";
+                _logger.LogInformation("Medicine {Id} '{Name}' permanently deleted (no order history)", removedId, removedName);
+            }
+
+            await _context.SaveChangesAsync();
 
             // Notify Pharmacist to remove from their view
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Deleted, m, AppRole.Admin);
 
-            return $"Medicine '{removedName}' (ID: {removedId}) was deleted successfully.";
+            return message;
         }
 
         public async Task<List<Medicine>> SearchMedicinesAsync(string name, bool includeHidden = true)
