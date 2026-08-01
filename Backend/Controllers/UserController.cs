@@ -36,8 +36,8 @@ public class UsersController : ControllerBase
     [HttpDelete("{userId}")]
     public async Task<IActionResult> Delete(string userId)
     {
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
-            ?? User.FindFirstValue("nameid") 
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("nameid")
             ?? User.FindFirstValue("sub");
 
         if (string.IsNullOrEmpty(currentUserId))
@@ -75,8 +75,8 @@ public class UsersController : ControllerBase
     [HttpPatch("{userId}/role")]
     public async Task<IActionResult> UpdateRole(string userId, [FromBody] UpdateRoleDto dto)
     {
-        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) 
-            ?? User.FindFirstValue("nameid") 
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("nameid")
             ?? User.FindFirstValue("sub");
 
         if (string.IsNullOrEmpty(currentUserId))
@@ -88,7 +88,7 @@ public class UsersController : ControllerBase
         try
         {
             var updatedUser = await _service.UpdateUserRoleAsync(userId, dto.Role, currentUserId);
-            _logger.LogInformation("[Security] Role updated: User {UserId} changed to {Role} by Admin {AdminId}", 
+            _logger.LogInformation("[Security] Role updated: User {UserId} changed to {Role} by Admin {AdminId}",
                 userId, dto.Role, currentUserId);
             return Ok(updatedUser);
         }
@@ -115,7 +115,7 @@ public class UsersController : ControllerBase
         try
         {
             var updatedUser = await _service.UpdateUserAsync(userId, dto);
-            _logger.LogInformation("[Security] User profile updated: {UserId}, NewUserName: {UserName}", 
+            _logger.LogInformation("[Security] User profile updated: {UserId}, NewUserName: {UserName}",
                 userId, dto.UserName);
             return Ok(updatedUser);
         }

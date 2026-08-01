@@ -1,4 +1,4 @@
-using Hayaa.Backend.Models;
+using Hayat.Backend.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -41,13 +41,13 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
 
         builder.Entity<AppUser>(entity =>
         {
-        entity.Property(u => u.UserName)
-              .IsRequired()
-              .HasMaxLength(100);
+            entity.Property(u => u.UserName)
+                  .IsRequired()
+                  .HasMaxLength(100);
 
-        entity.Property(u => u.Email)
-              .IsRequired()
-              .HasMaxLength(200);
+            entity.Property(u => u.Email)
+                  .IsRequired()
+                  .HasMaxLength(200);
 
         });
 
@@ -61,6 +61,10 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
               .IsRequired()
               .HasPrecision(18, 2);
 
+        entity.Property(m => m.CostPrice)
+              .IsRequired()
+              .HasPrecision(18, 2);
+
         entity.Property(m => m.Quantity)
               .IsRequired();
     });
@@ -68,6 +72,13 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
     {
         entity.Property(o => o.Quantity)
               .IsRequired();
+
+        entity.Property(o => o.Price)
+              .HasPrecision(18, 2);
+
+        entity.Property(o => o.CostPrice)
+              .IsRequired()
+              .HasPrecision(18, 2);
     });
     }
 }

@@ -7,3 +7,4 @@ export { OrderListItem } from "./OrderListItem";
 export { InvoiceModal } from "./InvoiceModal";
 export { SupplyStockPanel } from "./SupplyStockPanel";
 export { SupplierPanel } from "./SupplierPanel";
+export { FinancePanel } from "./FinancePanel";
