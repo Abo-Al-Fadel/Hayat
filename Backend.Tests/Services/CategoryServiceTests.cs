@@ -175,7 +175,7 @@ public class CategoryServiceTests
         using var context = CreateInMemoryContext();
         var service = CreateService(context);
         var category = await service.CreateAsync(new CreateCategoryDto { Name = "WithMeds" });
-        
+
         // Add a medicine to the category
         context.Medicines.Add(new Medicine { Name = "TestMed", Price = 10, Quantity = 5, CategoryId = category.Id });
         await context.SaveChangesAsync();

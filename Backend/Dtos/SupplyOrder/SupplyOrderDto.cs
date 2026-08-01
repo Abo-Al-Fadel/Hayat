@@ -14,7 +14,7 @@ public class SupplyOrderDto
 
     public List<SupplyOrderItemDto> Items { get; set; } = new();
     public SupplyOrderStatusEnum Status { get; set; }
-    
+
     public string? Notes { get; set; }
     public decimal? TotalAmount { get; set; }
 }

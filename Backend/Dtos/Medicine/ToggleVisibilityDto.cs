@@ -1,4 +1,4 @@
-namespace Hayaa.Backend.Dtos.Medicine
+namespace Hayat.Backend.Dtos.Medicine
 {
     public class ToggleVisibilityDto
     {

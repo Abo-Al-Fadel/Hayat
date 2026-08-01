@@ -1,6 +1,6 @@
 using Backend.Hubs;
 using Backend.Services;
-using Hayaa.Backend.Models;
+using Hayat.Backend.Models;
 using Microsoft.AspNetCore.SignalR;
 
 public class NotificationService : INotificationService
@@ -33,7 +33,7 @@ public class NotificationService : INotificationService
     public async Task NotifyMedicineChangeAsync(NotificationAction action, Medicine medicine, AppRole actorRole)
     {
         var targetRole = GetTargetRole(actorRole, "Medicine");
-        if (targetRole == null) 
+        if (targetRole == null)
         {
             _logger.LogWarning("[SignalR] No target role for actorRole={Actor}, context=Medicine", actorRole);
             return;
@@ -71,7 +71,7 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to {Role}: {Action} {Medicine}", 
+        _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to {Role}: {Action} {Medicine}",
             role, action.ToString().ToLower(), medicine.Name);
 
         await _hub.Clients.Group(role.ToString())
@@ -105,7 +105,7 @@ public class NotificationService : INotificationService
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("[SignalR] Broadcasting ReceiveNotification to {Role}: {Message}", role, message);
-            
+
         await _hub.Clients.Group(role.ToString())
                           .SendAsync("ReceiveNotification", new
                           {
@@ -130,7 +130,7 @@ public class NotificationService : INotificationService
             timestamp = DateTime.UtcNow
         };
 
-        _logger.LogInformation("[SignalR] Broadcasting CategoryChanged to all roles: {Action} {Category}", 
+        _logger.LogInformation("[SignalR] Broadcasting CategoryChanged to all roles: {Action} {Category}",
             action.ToString().ToLower(), category.Name);
 
         // Broadcast to all roles - categories are shared data
@@ -213,7 +213,7 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("[SignalR] Broadcasting SupplyOrderStatusChanged to {Role}: Order {Id} {Old} → {New}", 
+        _logger.LogInformation("[SignalR] Broadcasting SupplyOrderStatusChanged to {Role}: Order {Id} {Old} → {New}",
             role, supplyOrder.Id, oldStatus, supplyOrder.Status);
 
         var payload = new
@@ -282,7 +282,7 @@ public class NotificationService : INotificationService
         // Only alert on transition INTO low stock state
         bool wasAboveThreshold = previousQuantity > medicine.LowStockThreshold;
         bool isNowAtOrBelowThreshold = medicine.Quantity <= medicine.LowStockThreshold;
-        
+
         if (!wasAboveThreshold || !isNowAtOrBelowThreshold)
         {
             _logger.LogDebug("[LowStock] No alert needed for {Medicine}. Previous: {Prev}, Current: {Current}, Threshold: {Threshold}",
@@ -306,7 +306,7 @@ public class NotificationService : INotificationService
         _context.Notifications.Add(notif);
         await _context.SaveChangesAsync();
 
-        _logger.LogWarning("[SignalR] LowStockAlert: {Name}, Qty: {Qty}, Threshold: {Threshold}", 
+        _logger.LogWarning("[SignalR] LowStockAlert: {Name}, Qty: {Qty}, Threshold: {Threshold}",
             medicine.Name, medicine.Quantity, medicine.LowStockThreshold);
 
         var payload = new
@@ -348,7 +348,7 @@ public class NotificationService : INotificationService
 
     // INVENTORY STOCK INCREASED - Notifies Pharmacist and Admin when supply order is STORED
     public async Task NotifyInventoryStockIncreasedAsync(
-        SupplyOrder supplyOrder, 
+        SupplyOrder supplyOrder,
         List<(int MedicineId, string MedicineName, int NewQuantity, int AddedQuantity)> stockChanges)
     {
         if (!stockChanges.Any()) return;
@@ -356,7 +356,7 @@ public class NotificationService : INotificationService
         // Build message
         string message;
         int totalAdded = stockChanges.Sum(c => c.AddedQuantity);
-        
+
         if (stockChanges.Count == 1)
         {
             var item = stockChanges[0];

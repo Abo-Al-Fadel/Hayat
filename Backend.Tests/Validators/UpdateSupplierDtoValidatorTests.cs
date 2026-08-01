@@ -179,8 +179,8 @@ public class UpdateSupplierDtoValidatorTests
     [Fact]
     public void AllFields_WhenValid_ShouldPass()
     {
-        var dto = new UpdateSupplierDto 
-        { 
+        var dto = new UpdateSupplierDto
+        {
             Name = "PharmaCorp",
             Email = "contact@pharmacorp.com",
             Phone = "+1 (800) 555-1234"
@@ -192,8 +192,8 @@ public class UpdateSupplierDtoValidatorTests
     [Fact]
     public void AllFields_WhenMultipleErrors_ShouldReportAll()
     {
-        var dto = new UpdateSupplierDto 
-        { 
+        var dto = new UpdateSupplierDto
+        {
             Name = "",
             Email = "invalid",
             Phone = "abc"

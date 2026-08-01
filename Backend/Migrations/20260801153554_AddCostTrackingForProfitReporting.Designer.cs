@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Backend.Migrations
 {
     [DbContext(typeof(PharmacyDbContext))]
-    [Migration("20260115215907_AddPaymentMethodToOrders")]
-    partial class AddPaymentMethodToOrders
+    [Migration("20260801153554_AddCostTrackingForProfitReporting")]
+    partial class AddCostTrackingForProfitReporting
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -106,28 +106,6 @@ namespace Backend.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Categories");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Name = "Medicine"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Name = "Supplements"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Name = "Equipment"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Name = "Cosmetics"
-                        });
                 });
 
             modelBuilder.Entity("Hayat.Backend.Models.Notification", b =>
@@ -155,7 +133,6 @@ namespace Backend.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("MedicineName")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
@@ -164,12 +141,30 @@ namespace Backend.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("Role")
+                    b.Property<string>("NewStatus")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OldStatus")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("SupplyOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SupplyOrderName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TargetRole")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("IsRead");
+
+                    b.HasIndex("TargetRole");
 
                     b.ToTable("Notifications");
                 });
@@ -182,11 +177,21 @@ namespace Backend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("CategoryId")
+                    b.Property<int?>("CategoryId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("CostPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Image")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsHidden")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("LowStockThreshold")
+                        .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -360,6 +365,9 @@ namespace Backend.Migrations
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("int");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
                     b.Property<decimal>("TotalPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -376,6 +384,10 @@ namespace Backend.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CostPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("MedicineId")
                         .HasColumnType("int");
@@ -416,7 +428,7 @@ namespace Backend.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PaymentMethod");
+                    b.ToTable("PaymentMethods");
 
                     b.HasData(
                         new
@@ -457,6 +469,29 @@ namespace Backend.Migrations
                     b.ToTable("Stocks");
                 });
 
+            modelBuilder.Entity("Supplier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Email")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Phone")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Suppliers");
+                });
+
             modelBuilder.Entity("SupplyOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -465,11 +500,32 @@ namespace Backend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("OrderDate")
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("OrderedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ShippedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("StoredAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("SupplierId")
                         .HasColumnType("int");
@@ -478,6 +534,8 @@ namespace Backend.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SupplierId");
 
                     b.ToTable("SupplyOrders");
                 });
@@ -499,6 +557,9 @@ namespace Backend.Migrations
                     b.Property<int>("SupplyOrderId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MedicineId");
@@ -513,8 +574,7 @@ namespace Backend.Migrations
                     b.HasOne("Category", "Category")
                         .WithMany("Medicines")
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Category");
                 });
@@ -600,6 +660,17 @@ namespace Backend.Migrations
                     b.Navigation("Medicine");
                 });
 
+            modelBuilder.Entity("SupplyOrder", b =>
+                {
+                    b.HasOne("Supplier", "Supplier")
+                        .WithMany("SupplyOrders")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Supplier");
+                });
+
             modelBuilder.Entity("SupplyOrderItem", b =>
                 {
                     b.HasOne("Medicine", "Medicine")
@@ -627,6 +698,11 @@ namespace Backend.Migrations
             modelBuilder.Entity("Order", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Supplier", b =>
+                {
+                    b.Navigation("SupplyOrders");
                 });
 
             modelBuilder.Entity("SupplyOrder", b =>

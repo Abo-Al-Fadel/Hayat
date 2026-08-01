@@ -37,8 +37,8 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var dto = new CreateSupplierDto 
-        { 
+        var dto = new CreateSupplierDto
+        {
             Name = "PharmaCorp",
             Phone = "123-456-7890",
             Email = "contact@pharmacorp.com"
@@ -60,8 +60,8 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "TestSupplier",
             Phone = "111-222-3333",
             Email = "test@supplier.com"
@@ -97,16 +97,16 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "OldName",
             Phone = "000-000-0000",
             Email = "old@email.com"
         });
 
         // Act
-        var result = await service.UpdateAsync(id, new UpdateSupplierDto 
-        { 
+        var result = await service.UpdateAsync(id, new UpdateSupplierDto
+        {
             Name = "NewName",
             Phone = "999-999-9999",
             Email = "new@email.com"
@@ -118,7 +118,7 @@ public class SupplierServiceTests
         Assert.Equal("NewName", result.Name);
         Assert.Equal("999-999-9999", result.Phone);
         Assert.Equal("new@email.com", result.Email);
-        
+
         // Verify persisted
         var updated = await service.GetByIdAsync(id);
         Assert.NotNull(updated);
@@ -145,16 +145,16 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "Original",
             Phone = "123-456-7890",
             Email = "original@test.com"
         });
 
         // Act - update only name, null for phone/email
-        var result = await service.UpdateAsync(id, new UpdateSupplierDto 
-        { 
+        var result = await service.UpdateAsync(id, new UpdateSupplierDto
+        {
             Name = "Updated",
             Phone = null,
             Email = null
@@ -173,15 +173,15 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "Supplier",
             Email = "old@email.com"
         });
 
         // Act
-        var result = await service.UpdateAsync(id, new UpdateSupplierDto 
-        { 
+        var result = await service.UpdateAsync(id, new UpdateSupplierDto
+        {
             Name = "Supplier",
             Email = "new@updated.org"
         });
@@ -197,15 +197,15 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "Supplier",
             Phone = "000-000-0000"
         });
 
         // Act
-        var result = await service.UpdateAsync(id, new UpdateSupplierDto 
-        { 
+        var result = await service.UpdateAsync(id, new UpdateSupplierDto
+        {
             Name = "Supplier",
             Phone = "+1 (555) 123-4567"
         });
@@ -221,8 +221,8 @@ public class SupplierServiceTests
         // Arrange
         using var context = CreateInMemoryContext();
         var service = new SupplierService(context);
-        var id = await service.CreateAsync(new CreateSupplierDto 
-        { 
+        var id = await service.CreateAsync(new CreateSupplierDto
+        {
             Name = "ToDelete",
             Phone = "111-111-1111"
         });

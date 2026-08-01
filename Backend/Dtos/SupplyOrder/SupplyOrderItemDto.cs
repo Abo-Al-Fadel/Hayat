@@ -7,7 +7,7 @@ public class SupplyOrderItemDto
 
     [Required]
     [Range(1, int.MaxValue, ErrorMessage = "Quantity must be positive")]
-    
+
     public int Quantity { get; set; }
     public string MedicineName { get; set; } = string.Empty;
     public decimal UnitPrice { get; set; }

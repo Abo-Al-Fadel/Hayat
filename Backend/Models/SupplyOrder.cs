@@ -21,6 +21,6 @@ public class SupplyOrder
     public SupplyOrderStatusEnum Status { get; set; } = SupplyOrderStatusEnum.Created;
 
     public ICollection<SupplyOrderItem> Items { get; set; } = new List<SupplyOrderItem>();
-    
+
     public string? Notes { get; set; }
 }

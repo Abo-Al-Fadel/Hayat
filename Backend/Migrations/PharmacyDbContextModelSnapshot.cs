@@ -105,7 +105,7 @@ namespace Backend.Migrations
                     b.ToTable("Categories");
                 });
 
-            modelBuilder.Entity("Hayaa.Backend.Models.Notification", b =>
+            modelBuilder.Entity("Hayat.Backend.Models.Notification", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -176,6 +176,10 @@ namespace Backend.Migrations
 
                     b.Property<int?>("CategoryId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("CostPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Image")
                         .HasColumnType("nvarchar(max)");
@@ -377,6 +381,10 @@ namespace Backend.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("CostPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("MedicineId")
                         .HasColumnType("int");

@@ -111,7 +111,7 @@ namespace Backend.Migrations
                     b.ToTable("Categories");
                 });
 
-            modelBuilder.Entity("Hayaa.Backend.Models.Notification", b =>
+            modelBuilder.Entity("Hayat.Backend.Models.Notification", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()

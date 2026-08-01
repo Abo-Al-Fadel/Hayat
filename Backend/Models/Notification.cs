@@ -1,7 +1,7 @@
 // Models/Notification.cs
 using System;
 
-namespace Hayaa.Backend.Models
+namespace Hayat.Backend.Models
 {
     public class Notification
     {

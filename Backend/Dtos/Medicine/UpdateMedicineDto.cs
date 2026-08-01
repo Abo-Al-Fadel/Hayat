@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Hayaa.Backend.Dtos.Medicine
+namespace Hayat.Backend.Dtos.Medicine
 {
     public class UpdateMedicineDto
     {
@@ -14,7 +14,7 @@ namespace Hayaa.Backend.Dtos.Medicine
         [Required(ErrorMessage = "Quantity is required")]
         [Range(0, int.MaxValue, ErrorMessage = "Quantity must be non-negative")]
         public int Quantity { get; set; }
-        
+
         public int? CategoryId { get; set; }
         public IFormFile? Image { get; set; }
         public bool? IsHidden { get; set; }

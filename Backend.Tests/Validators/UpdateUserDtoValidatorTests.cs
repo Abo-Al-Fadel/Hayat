@@ -138,8 +138,8 @@ public class UpdateUserDtoValidatorTests
     [Fact]
     public void AllFields_WhenValid_ShouldPass()
     {
-        var dto = new UpdateUserDto 
-        { 
+        var dto = new UpdateUserDto
+        {
             UserName = "validuser",
             Email = "valid@email.com"
         };
@@ -150,8 +150,8 @@ public class UpdateUserDtoValidatorTests
     [Fact]
     public void AllFields_WhenMultipleErrors_ShouldReportAll()
     {
-        var dto = new UpdateUserDto 
-        { 
+        var dto = new UpdateUserDto
+        {
             UserName = "",
             Email = "invalid"
         };

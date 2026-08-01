@@ -1,4 +1,4 @@
-using Hayaa.Backend.Models;
+using Hayat.Backend.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
