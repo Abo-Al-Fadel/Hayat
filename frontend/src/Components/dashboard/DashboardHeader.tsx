@@ -1,6 +1,6 @@
 // src/Components/dashboard/DashboardHeader.tsx
 import React from "react";
-import { Sun, Moon, Search } from "lucide-react";
+import { Sun, Moon, Search, Menu } from "lucide-react";
 import { Spinner } from "../ui/Spinner";
 
 interface DashboardHeaderProps {
@@ -20,6 +20,8 @@ interface DashboardHeaderProps {
   onUndo?: () => void;
   // Custom actions
   children?: React.ReactNode;
+  /** Opens the mobile navigation drawer. Rendered below `lg` only. */
+  onOpenNav?: () => void;
 }
 
 export function DashboardHeader({
@@ -36,16 +38,28 @@ export function DashboardHeader({
   onSave,
   onUndo,
   children,
+  onOpenNav,
 }: DashboardHeaderProps) {
   return (
-    <header className="h-16 bg-white dark:bg-gray-800 shadow-md flex items-center justify-between px-6">
-      <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-        {title}
-      </h1>
+    <header className="min-h-16 bg-white dark:bg-gray-800 shadow-md flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        {onOpenNav && (
+          <button
+            onClick={onOpenNav}
+            aria-label="Open navigation"
+            className="lg:hidden p-2 -ml-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        )}
+        <h1 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-200 truncate">
+          {title}
+        </h1>
+      </div>
 
-      <div className="flex items-center gap-2 flex-1 justify-end">
+      <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
         {showSearch && onSearchChange && (
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 min-w-0 max-w-md">
             <input
               value={searchValue}
               onChange={(e) => onSearchChange(e.target.value)}

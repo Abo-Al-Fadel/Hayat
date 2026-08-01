@@ -2,16 +2,16 @@ import { test, expect } from "@playwright/test";
 import { ACCOUNTS, API_BASE, apiLogin } from "./accounts";
 import { loginAs, clearSession, trackPageErrors } from "./helpers";
 
-test.describe("Admin finance section", () => {
+test.describe("Admin statistics section", () => {
   test.beforeEach(async ({ page }) => {
     await clearSession(page);
     await loginAs(page, "admin");
   });
 
-  test("Finance section renders the money cards", async ({ page }) => {
+  test("Statistics section renders the money cards", async ({ page }) => {
     const errors = trackPageErrors(page);
 
-    await page.getByRole("button", { name: "Finance", exact: true }).click();
+    await page.getByRole("button", { name: "Statistics", exact: true }).click();
     await expect(page.getByRole("heading", { name: /^Sales —/ })).toBeVisible({ timeout: 15_000 });
 
     for (const label of [
@@ -37,7 +37,7 @@ test.describe("Admin finance section", () => {
   });
 
   test("period selector reloads the figures", async ({ page }) => {
-    await page.getByRole("button", { name: "Finance", exact: true }).click();
+    await page.getByRole("button", { name: "Statistics", exact: true }).click();
     await expect(page.getByRole("heading", { name: /^Sales — last 30 days$/ })).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole("button", { name: "7 days", exact: true }).click();

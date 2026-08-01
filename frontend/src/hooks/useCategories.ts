@@ -83,11 +83,12 @@ export function useCategories() {
       let updated: Category[];
       
       switch (payload.action) {
-        case "created":
-          // Filter out any existing entry with same ID first (prevents duplicates)
+        case "created": {
+          // Braces scope the declaration to this case.
           const filtered = prev.filter(c => c.id !== payload.id);
           updated = [...filtered, { id: payload.id, name: payload.name }];
           break;
+        }
         case "updated":
           updated = prev.map(c => c.id === payload.id ? { ...c, name: payload.name } : c);
           break;

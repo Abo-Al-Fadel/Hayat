@@ -24,7 +24,7 @@
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle, Bell, DollarSign } from "lucide-react";
+import { Package, FileText, Eye, EyeOff, Truck, Users, X, Plus, Trash2, Edit2, FolderOpen, AlertTriangle, Bell, BarChart3 } from "lucide-react";
 import toast from "react-hot-toast";
 
 // Hooks
@@ -79,7 +79,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "orders", label: "Orders", icon: <FileText className="h-5 w-5" /> },
   { id: "stocks", label: "Stocks", icon: <Truck className="h-5 w-5" /> },
   { id: "users", label: "Users", icon: <Users className="h-5 w-5" /> },
-  { id: "finance", label: "Finance", icon: <DollarSign className="h-5 w-5" /> },
+  { id: "finance", label: "Statistics", icon: <BarChart3 className="h-5 w-5" /> },
 ];
 
 type PageType = "products" | "orders" | "stocks" | "users" | "finance";
@@ -126,6 +126,8 @@ export default function AdminDashboard() {
 
   // Active section - initialized from localStorage for persistence
   const [activePage, setActivePage] = useState<PageType>(getPersistedSection);
+  // Mobile navigation drawer (ignored from lg up, where the sidebar is static).
+  const [navOpen, setNavOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterHidden, setFilterHidden] = useState<"all" | "visible" | "hidden">("all");
   
@@ -367,7 +369,7 @@ export default function AdminDashboard() {
       await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadCount(0);
-    } catch (err) {
+    } catch {
       toast.error("Failed to mark all as read");
     }
   }, []);
@@ -390,7 +392,7 @@ export default function AdminDashboard() {
     try {
       const data = await getUsers();
       setUsers(data);
-    } catch (err) {
+    } catch {
       if (!shownErrorsRef.current.has("users")) {
         shownErrorsRef.current.add("users");
         toast.error("Failed to load users");
@@ -424,7 +426,7 @@ export default function AdminDashboard() {
     try {
       const data = await getSuppliers();
       setSuppliers(data);
-    } catch (err) {
+    } catch {
       if (!shownErrorsRef.current.has("suppliers")) {
         shownErrorsRef.current.add("suppliers");
         toast.error("Failed to load suppliers");
@@ -438,7 +440,7 @@ export default function AdminDashboard() {
     try {
       const data = await getSupplyStocks();
       setSupplyStocks(data);
-    } catch (err) {
+    } catch {
       if (!shownErrorsRef.current.has("supplyStocks")) {
         shownErrorsRef.current.add("supplyStocks");
         toast.error("Failed to load supply stocks");
@@ -521,7 +523,7 @@ export default function AdminDashboard() {
         await updateProductImage(id, file);
         toast.success("Image updated");
         broadcast("updated", { id, name: p.name });
-      } catch (err) {
+      } catch {
         toast.error("Failed to upload image");
       }
     },
@@ -557,7 +559,7 @@ export default function AdminDashboard() {
       try {
         await toggleHidden(id);
         broadcast("updated", { id, name: p.name });
-      } catch (err) {
+      } catch {
         toast.error("Failed to update visibility");
       }
     },
@@ -568,7 +570,7 @@ export default function AdminDashboard() {
     try {
       await saveAll();
       toast.success("Changes saved");
-    } catch (err) {
+    } catch {
       toast.error("Failed to save changes");
     }
   }, [saveAll]);
@@ -706,7 +708,7 @@ export default function AdminDashboard() {
       setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id));
       toast.success("User deleted successfully");
       closeDeleteUserModal();
-    } catch (err) {
+    } catch {
       toast.error("Failed to delete user");
     } finally {
       setUserDeleting(false);
@@ -894,7 +896,7 @@ export default function AdminDashboard() {
     try {
       const data = await getSupplyStocks();
       setSupplyStocks(data);
-    } catch (err) {
+    } catch {
       toast.error("Failed to refresh supply stocks");
     } finally {
       setSupplyStocksLoading(false);
@@ -1083,7 +1085,7 @@ export default function AdminDashboard() {
       case "orders": return "Orders";
       case "stocks": return "Stocks & Suppliers";
       case "users": return "Users Management";
-      case "finance": return "Finance & Profit";
+      case "finance": return "Statistics";
       default: return "Dashboard";
     }
   };
@@ -1096,6 +1098,8 @@ export default function AdminDashboard() {
         items={NAV_ITEMS}
         activePage={activePage}
         onNavigate={(id) => setActivePage(id as PageType)}
+        isOpen={navOpen}
+        onClose={() => setNavOpen(false)}
       />
 
       {/* Main content */}
@@ -1104,6 +1108,7 @@ export default function AdminDashboard() {
           title={getPageTitle()}
           darkMode={darkMode}
           onToggleDarkMode={toggleDarkMode}
+          onOpenNav={() => setNavOpen(true)}
           showSearch={activePage === "products"}
           searchPlaceholder="Search medicines..."
           searchValue={searchTerm}
@@ -1228,7 +1233,7 @@ export default function AdminDashboard() {
           />
         )}
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {/* ─── Products Page ─────────────────────────────────────────────── */}
           {activePage === "products" && (
             <>

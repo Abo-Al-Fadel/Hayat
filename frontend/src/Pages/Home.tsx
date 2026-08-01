@@ -9,9 +9,7 @@ import { useAuth } from "../Context/AuthContext";
 
 export const FaUserCircle = (props: React.SVGProps<SVGSVGElement>) => FaUserCircleRaw(props);
 
-type Props = {};
-
-const Home = (props: Props) => {
+const Home = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -43,11 +41,11 @@ const Home = (props: Props) => {
   };
 
   return (
-    <div className="relative bg-homepage min-h-screen text-white px-6 md:px-14">
+    <div className="relative bg-homepage min-h-screen text-white px-4 sm:px-6 md:px-14">
       {/* Header */}
-      <header className="relative z-20 flex items-center justify-between py-6">
+      <header className="relative z-20 flex flex-wrap items-center justify-between gap-3 py-4 sm:py-6">
         {/* Logo + Name */}
-        <div className="flex items-center gap-3 pl-4 md:pl-8">
+        <div className="flex items-center gap-3 pl-0 md:pl-8">
           <img src={hayat} alt="Hayat" className="h-10 w-10 object-contain" />
           <span
             className="exported-logo"
@@ -63,8 +61,8 @@ const Home = (props: Props) => {
           </span>
         </div>
 
-        {/* Top-centered navigation */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 top-8 flex gap-4">
+        {/* Top-centered navigation - in flow on mobile, absolutely centred from md up */}
+        <div className="order-3 w-full flex justify-center gap-3 md:order-none md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2 md:top-8">
           <button
             className="px-5 py-2 rounded-full text-sm bg-[#003465] hover:bg-blue-900"
             onClick={handleProducts}
@@ -77,7 +75,7 @@ const Home = (props: Props) => {
         </div>
 
         {/* Profile icon/Logout */}
-        <div className="pr-4 md:pr-8">
+        <div className="pr-0 md:pr-8">
           {!user?(
           <button onClick={handleProfile}>
             {FaUserCircle({ className: "h-8 w-8 text-[#003465] bg-white rounded-full p1 hover:text-[#00274d]" })}
@@ -102,15 +100,15 @@ const Home = (props: Props) => {
       {/* Hero Section */}
       <main className="relative z-20 py-12 md:py-20 ">
         <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-2 items-center gap-8">
-          <div className="md:pl-6 lg:pl-12 xl:pl-20 relative -translate-y-12">
-            <h1 className="font-extrabold text-[44px] md:text-[72px] leading-[1.1]">
-              <span className="whitespace-nowrap">Pharmacy Stock</span>
+          <div className="md:pl-6 lg:pl-12 xl:pl-20 relative -translate-y-4 md:-translate-y-12">
+            <h1 className="font-extrabold text-[32px] sm:text-[44px] md:text-[72px] leading-[1.1]">
+              <span className="sm:whitespace-nowrap">Pharmacy Stock</span>
               <br />
               Management.
             </h1>
 
             <p className="text-gray-200/80 mt-4 max-w-[420px] text-base md:text-lg">
-              <span className="whitespace-nowrap">Control your pharmacy stock</span>
+              <span className="sm:whitespace-nowrap">Control your pharmacy stock</span>
               <br />
               without stress or confusion.
             </p>
@@ -118,7 +116,7 @@ const Home = (props: Props) => {
             <div className="mt-4">
               <button
                 onClick={handleGetStarted}
-                className="inline-block bg-[#003465] hover:bg-[#00274d] text-white font-bold py-5 px-10 text-2xl md:py-5 rounded-lg shadow-lg"
+                className="inline-block bg-[#003465] hover:bg-[#00274d] text-white font-bold py-4 px-8 text-xl sm:py-5 sm:px-10 sm:text-2xl rounded-lg shadow-lg"
               >
                 Get Started
               </button>
@@ -129,7 +127,7 @@ const Home = (props: Props) => {
             <img
               src={logo}
               alt="Medicine bottle"
-              className="w-[260px] md:w-[320px] lg:w-[380px] transform rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
+              className="w-[180px] sm:w-[260px] md:w-[320px] lg:w-[380px] transform rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
               style={{ filter: "drop-shadow(-30px 90px 20px rgba(2, 6, 23, 0.24))" }}
             />
           </div>
