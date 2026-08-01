@@ -1,17 +1,14 @@
 import React from "react";
 import logo from "../Images/medicine-bottle.png";
-import hayat from "../Images/HTL.png";
 import "./Home.css";
 import leaf from "../Images/leaf.png";
-import { FaSignOutAlt, FaUserCircle as FaUserCircleRaw } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
-
-export const FaUserCircle = (props: React.SVGProps<SVGSVGElement>) => FaUserCircleRaw(props);
+import { PublicHeader } from "../Components/PublicHeader";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
 
   const handleGetStarted = () => {
@@ -28,66 +25,10 @@ const Home = () => {
     else navigate("/"); // fallback for unknown roles
   };
 
-  const handleProducts = () => {
-    handleGetStarted();
-  };
-
-  const handleProfile = () => {
-    navigate("/login");
-  };
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
-  };
 
   return (
     <div className="relative bg-homepage min-h-screen text-white px-4 sm:px-6 md:px-14">
-      {/* Header */}
-      <header className="relative z-20 flex flex-wrap items-center justify-between gap-3 py-4 sm:py-6">
-        {/* Logo + Name */}
-        <div className="flex items-center gap-3 pl-0 md:pl-8">
-          <img src={hayat} alt="Hayat" className="h-10 w-10 object-contain" />
-          <span
-            className="exported-logo"
-            style={{
-              fontFamily: "Winslowtitle Boldnarrow",
-              fontSize: "1.75rem",
-              color: "white",
-              textShadow: "2px 1px 2px rgba(255, 255, 255, 0.31)",
-              transform: "translateY(4px)",
-            }}
-          >
-            Hayat
-          </span>
-        </div>
-
-        {/* Top-centered navigation - in flow on mobile, absolutely centred from md up */}
-        <div className="order-3 w-full flex justify-center gap-3 md:order-none md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2 md:top-8">
-          <button
-            className="px-5 py-2 rounded-full text-sm bg-[#003465] hover:bg-blue-900"
-            onClick={handleProducts}
-          >
-            Products
-          </button>
-          <button className="px-5 py-2 rounded-full text-sm bg-[#003465] hover:bg-blue-900">
-            Contact
-          </button>
-        </div>
-
-        {/* Profile icon/Logout */}
-        <div className="pr-0 md:pr-8">
-          {!user?(
-          <button onClick={handleProfile}>
-            {FaUserCircle({ className: "h-8 w-8 text-[#003465] bg-white rounded-full p1 hover:text-[#00274d]" })}
-          </button>
-          ) : (
-          <button onClick={handleLogout} className="flex items-center gap-2 bg-[#003465] hover:bg-[#00274d] px-3 py-1 rounded-md">
-            {FaSignOutAlt({className:"h-6 w-6 text-white/90 "})}
-            <span className="text-sm">Logout</span>
-            </button>
-          )}
-        </div>
-      </header>
+      <PublicHeader active="products" />
         {/* Slogan under nav */}
         <div className="text-center mt-6 md:mt-10 max-w-lg mx-auto">
         <p className="italic text-gray-200/70 text-xl md:text-2xl font-serif leading-snug md:leading-relaxed relative">
