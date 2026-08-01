@@ -13,13 +13,26 @@ frontend/dist/
 # ========================
 # Backend (.NET)
 # ========================
-Backend/bin/
-Backend/obj/
+# Match any project's build output, not just Backend/ - Backend.Tests/bin and
+# Backend.Tests/obj were previously committed because they were not covered.
+[Bb]in/
+[Oo]bj/
+
+# ========================
+# Local secrets (never commit)
+# ========================
+# Backend config comes from user-secrets / environment variables.
+appsettings.*.local.json
+secrets.json
 
 # ========================
 # Testing
 # ========================
 coverage/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/.playwright/
 
 # ========================
 # Environment files
