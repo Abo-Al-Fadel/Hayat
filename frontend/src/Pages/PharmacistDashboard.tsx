@@ -21,6 +21,13 @@ import {
 
 import toast, { Toaster } from "react-hot-toast";
 import { authorizedFetch, isSessionExpiredError } from "../Services/authorizedFetch";
+import {
+  DateRangeFilter,
+  EMPTY_RANGE,
+  isWithinRange,
+  isRangeActive,
+  type DateRange,
+} from "../Components/ui";
 import { getValidToken } from "../utils/token";
 
 interface Category {
@@ -192,6 +199,8 @@ const PharmacistDashboard: React.FC = () => {
   const [categoriesLoading, setCategoriesLoading] = useState(false);
 
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  // Date filter for the orders/invoices list.
+  const [ordersDateRange, setOrdersDateRange] = useState<DateRange>(EMPTY_RANGE);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orders, setOrders] = useState<CreatedOrder[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<CreatedOrder | null>(null);
@@ -868,6 +877,12 @@ const PharmacistDashboard: React.FC = () => {
     return products.filter((p) => p.name.toLowerCase().includes(query));
   }, [products, searchQuery]);
 
+  /** Orders narrowed to the selected date range. */
+  const visibleOrders = useMemo(
+    () => orders.filter((o) => isWithinRange(o.createdAt, ordersDateRange)),
+    [orders, ordersDateRange]
+  );
+
   /**
    * Handle category selection - SINGLE SELECT ONLY
    * Clicking same category deselects it, clicking different category switches to it
@@ -1361,7 +1376,7 @@ const PharmacistDashboard: React.FC = () => {
       {ordersModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setOrdersModalOpen(false)} />
-          <div className={`relative max-w-3xl w-full rounded-lg p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+          <div className={`relative max-w-3xl w-full max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">Orders</h3>
               <div className="flex items-center gap-2">
@@ -1369,15 +1384,31 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-4">
-              <div className="w-1/3 border-r pr-3">
+            {/* Date filter */}
+            <div className="mb-3">
+              <DateRangeFilter
+                value={ordersDateRange}
+                onChange={setOrdersDateRange}
+                darkMode={darkMode}
+                summary={
+                  isRangeActive(ordersDateRange)
+                    ? `${visibleOrders.length} of ${orders.length} orders`
+                    : undefined
+                }
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="w-full sm:w-1/3 sm:border-r sm:pr-3">
                 {ordersLoading ? (
                   <div className="text-sm text-gray-400">Loading orders…</div>
-                ) : orders.length === 0 ? (
-                  <div className="text-sm text-gray-400">No orders found</div>
+                ) : visibleOrders.length === 0 ? (
+                  <div className="text-sm text-gray-400">
+                    {orders.length === 0 ? "No orders found" : "No orders in this date range"}
+                  </div>
                 ) : (
                   <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                    {orders.map((o) => {
+                    {visibleOrders.map((o) => {
                       const isSelected = selectedOrder?.orderId === o.orderId;
                       return (
                         <div
