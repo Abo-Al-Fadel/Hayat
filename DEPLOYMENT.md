@@ -38,7 +38,9 @@ Keep this somewhere safe. It is the only thing standing between a stranger and a
 ## 1. Database — Azure SQL free offer
 
 1. Sign in at <https://portal.azure.com> (a free account is enough; no spend is required for this tier).
-2. **Create a resource → SQL Database**.
+2. **Create a resource → SQL Database**. Name the database **`hayat`** — the local
+   database is still called `Hayaa` for historical reasons, and there is no reason to
+   carry the old spelling into a database that does not exist yet.
 3. Create a new server. Note the **server name**, **admin login** and **admin password** — the password is not shown again.
 4. On the **Compute + storage** step choose **Apply free offer**. It must read *General Purpose — Serverless*, 32 GB. If you do not select this, the database is billable.
 5. Set **Backup storage redundancy** to *Locally redundant* — the cheapest, and enough here.

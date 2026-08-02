@@ -1,0 +1,232 @@
+name: CI
+
+# Everything that has to hold before a deploy. The docker job exists because the
+# Dockerfile cannot be built on the development machine - here it is built on every
+# push, so "it deployed fine locally" is never the level of confidence we have.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same branch.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  NODE_VERSION: "22"
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - run: dotnet restore Hayat.sln
+
+      - name: Build (warnings are errors)
+        run: dotnet build Hayat.sln -c Release --no-restore -warnaserror
+
+      - run: dotnet test Hayat.sln -c Release --no-build --verbosity normal
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: hayat-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: The image starts and refuses a weak signing key
+        run: |
+          set -euo pipefail
+
+          # A container that boots on a compromised key would be the whole point missed.
+          output=$(docker run --rm \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e 'ConnectionStrings__DefaultConnection=Server=nowhere;Database=x;User Id=x;Password=x;' \
+            -e 'JwtSettings__Key=HayaaPharmacyMostSecretKeyEverCreated!' \
+            -e JwtSettings__Issuer=hayat-api \
+            -e JwtSettings__Audience=hayat-client \
+            -e Cors__AllowedOrigins__0=https://example.test \
+            hayat-api:ci 2>&1 || true)
+
+          echo "$output"
+          echo "$output" | grep -q "known-compromised" \
+            || { echo "::error::the image started with a compromised signing key"; exit 1; }
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "CiPassw0rd!Strong"
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+
+    env:
+      API_PORT: "5057"
+      WEB_PORT: "3000"
+      SA_PASSWORD: "CiPassw0rd!Strong"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Wait for SQL Server
+        run: |
+          set -euo pipefail
+          # Polling beats a service health check here: when it fails, the reason is
+          # in this step's log rather than buried in the runner's container setup.
+          for i in $(seq 1 60); do
+            if docker exec "$(docker ps -q --filter ancestor=mcr.microsoft.com/mssql/server:2022-latest)" \
+                 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "SQL Server ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::SQL Server never became ready"
+          exit 1
+
+      - name: Publish the API
+        run: dotnet publish Backend/Backend.csproj -c Release -o ./api-publish
+
+      - name: Start the API
+        env:
+          # The database does not exist yet - the API migrates it on start-up, which
+          # is exactly the path a fresh deployment takes.
+          ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=HayatCi;User Id=sa;Password=CiPassw0rd!Strong;Encrypt=False;TrustServerCertificate=True;"
+          JwtSettings__Key: "ci-only-signing-key-never-used-outside-github-actions-0123456789"
+          JwtSettings__Issuer: hayat-api
+          JwtSettings__Audience: hayat-client
+          ASPNETCORE_ENVIRONMENT: Development
+          BootstrapAdmin__UserName: e2eadmin
+          BootstrapAdmin__Email: e2eadmin@example.test
+          BootstrapAdmin__Password: "E2eAdmin#2026x"
+        run: |
+          set -euo pipefail
+          ASPNETCORE_URLS="http://localhost:${API_PORT}" \
+            nohup dotnet ./api-publish/Backend.dll > api.log 2>&1 &
+
+          for i in $(seq 1 90); do
+            if curl -sf "http://localhost:${API_PORT}/health" >/dev/null; then
+              echo "API ready after ${i}s"
+              grep -E "Applying [0-9]+ pending" api.log || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API never became healthy"
+          cat api.log
+          exit 1
+
+      - name: Build and serve the frontend
+        working-directory: frontend
+        env:
+          REACT_APP_API_BASE: "http://localhost:5057"
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          nohup npx serve -s build -l "${WEB_PORT}" > ../web.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf "http://localhost:${WEB_PORT}" >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::static server never came up"
+          cat ../web.log
+          exit 1
+
+      - name: Install Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the suite
+        working-directory: frontend
+        env:
+          E2E_API_BASE: "http://localhost:5057"
+          E2E_WEB_BASE: "http://localhost:3000"
+        run: npx playwright test
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failures
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+            api.log
+            web.log
+          retention-days: 7
+          if-no-files-found: ignore
