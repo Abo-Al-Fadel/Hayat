@@ -7,7 +7,10 @@ namespace Backend.Controllers;
 /// <summary>Financial reporting. Money figures are Admin-only.</summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+// Authentication only - see the note in SupplierController about cumulative
+// [Authorize] attributes. Money is readable by Admin and the read-only HR observer;
+// nothing here writes anything.
+[Authorize]
 public class StatsController : ControllerBase
 {
     private readonly IStatsService _stats;
@@ -21,6 +24,7 @@ public class StatsController : ControllerBase
 
     /// <param name="days">Rolling window ending now. Ignored when from/to are supplied.</param>
     [HttpGet("financial")]
+    [Authorize(Roles = Roles.CanReadFinancials)]
     public async Task<IActionResult> GetFinancial(
         [FromQuery] int days = 30,
         [FromQuery] DateTime? from = null,
@@ -42,6 +46,7 @@ public class StatsController : ControllerBase
     /// regressive markup tiers. Lets the Admin price a new medicine consistently.
     /// </summary>
     [HttpGet("suggest-price")]
+    [Authorize(Roles = Roles.CanReadFinancials)]
     public IActionResult SuggestPrice([FromQuery] decimal cost)
     {
         if (cost < 0)
@@ -72,6 +77,7 @@ public class StatsController : ControllerBase
     public const int MaxOrderQuantity = 1_000_000;
 
     [HttpGet("suggest-purchase-price")]
+    [Authorize(Roles = Roles.CanReadFinancials)]
     // Bound as long, not int: a quantity above int.MaxValue used to fail model binding
     // before reaching this method, producing a framework 400 with no usable message -
     // so the UI simply lost the price with nothing to show the user. Taking a long lets

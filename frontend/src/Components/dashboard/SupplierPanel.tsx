@@ -11,6 +11,8 @@ interface SupplierPanelProps {
   onAddSupplier: (supplier: Omit<Supplier, "id">) => Promise<void>;
   onEditSupplier: (id: number, data: UpdateSupplierDto) => Promise<Supplier>;
   onDeleteSupplier: (id: number) => Promise<void>;
+  /** Hides every control that changes a supplier. The server refuses them anyway. */
+  readOnly?: boolean;
 }
 
 // Validation helpers. Tolerate undefined: a supplier object arriving without a field
@@ -81,6 +83,7 @@ export function SupplierPanel({
   onAddSupplier,
   onEditSupplier,
   onDeleteSupplier,
+  readOnly = false,
 }: SupplierPanelProps) {
   // Search state
   const [searchTerm, setSearchTerm] = useState("");
@@ -243,13 +246,15 @@ export function SupplierPanel({
             <Truck className="h-5 w-5 text-purple-600" />
             Suppliers
           </h3>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Supplier
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Add Supplier
+            </button>
+          )}
         </div>
 
         {/* Search - fixed below header */}
@@ -468,7 +473,8 @@ export function SupplierPanel({
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Action Buttons - absent entirely for a read-only observer */}
+                    {!readOnly && (
                     <div className="ml-3 flex items-center gap-1">
                       {/* Edit Button */}
                       <button
@@ -500,6 +506,7 @@ export function SupplierPanel({
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               ))}

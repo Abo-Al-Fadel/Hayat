@@ -27,7 +27,7 @@ namespace Backend.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
+        [Authorize(Roles = Roles.CanReadStock)]
         public async Task<IActionResult> GetAll()
         {
             var stocks = await _context.Medicines
@@ -48,7 +48,7 @@ namespace Backend.Controllers
         }
 
         [HttpGet("{medicineId}")]
-        [Authorize(Roles = "Admin,StorageManager,Pharmacist")]
+        [Authorize(Roles = Roles.CanReadStock)]
         public async Task<IActionResult> GetByMedicine(int medicineId)
         {
             var stock = await _context.Medicines
@@ -73,7 +73,7 @@ namespace Backend.Controllers
 
         /// <summary>Sets an absolute stock level, e.g. after a physical stock count.</summary>
         [HttpPut("{medicineId}/adjust")]
-        [Authorize(Roles = "Admin,StorageManager")]
+        [Authorize(Roles = Roles.CanAdjustStock)]
         public async Task<IActionResult> AdjustStock(int medicineId, [FromBody] int quantity)
         {
             if (quantity < 0)
@@ -99,7 +99,7 @@ namespace Backend.Controllers
         /// threshold to override the per-medicine value.
         /// </summary>
         [HttpGet("low-stock")]
-        [Authorize(Roles = "Admin,StorageManager")]
+        [Authorize(Roles = Roles.CanReadLowStock)]
         public async Task<IActionResult> GetLowStock([FromQuery] int? threshold = null)
         {
             var query = _context.Medicines.AsNoTracking();

@@ -57,7 +57,8 @@ const Login: React.FC = () => {
       hasRedirectedRef.current = true;
       const role = user.role.toLowerCase();
       
-      if (role === "admin") navigate("/admin", { replace: true });
+      // HR shares the admin dashboard, in read-only mode.
+      if (role === "admin" || role === "hr") navigate("/admin", { replace: true });
       else if (role === "pharmacist") navigate("/pharmacist", { replace: true });
       else if (role === "storagemanager" || role === "storage manager") navigate("/storage", { replace: true });
       else navigate("/", { replace: true });
@@ -75,7 +76,8 @@ const Login: React.FC = () => {
       
 
       // Single redirect with replace
-      if (role === "admin") navigate("/admin", { replace: true });
+      // HR shares the admin dashboard, in read-only mode.
+      if (role === "admin" || role === "hr") navigate("/admin", { replace: true });
       else if (role === "pharmacist") navigate("/pharmacist", { replace: true });
       else if (role === "storagemanager" || role === "storage manager") navigate("/storage", { replace: true });
       else navigate("/", { replace: true });

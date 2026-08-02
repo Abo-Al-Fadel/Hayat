@@ -32,6 +32,23 @@ export type User = {
   role: string;
 };
 
+/**
+ * The read-only observer role. Sees every page, changes nothing.
+ *
+ * Stored lowercase, like every other role in this context.
+ */
+export const READ_ONLY_ROLE = "hr";
+
+/**
+ * Whether this user may change anything.
+ *
+ * This drives what the UI *offers* - it is not what enforces the rule. Every write
+ * endpoint refuses the read-only role server-side, and RoleAuthorizationTests walks
+ * each one to prove it. Hiding a button is courtesy; the server is the boundary.
+ */
+export const canUserEdit = (user: User | null): boolean =>
+  user !== null && user.role?.toLowerCase() !== READ_ONLY_ROLE;
+
 type AuthContextType = {
   user: User | null;
   token: string | null;
@@ -41,6 +58,8 @@ type AuthContextType = {
   loading: boolean;
   isLoggedIn: () => boolean;
   isLoggingOut: boolean;
+  /** False for the read-only observer. See canUserEdit. */
+  canEdit: boolean;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -199,7 +218,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAuthenticated,
       loading,
       isLoggedIn,
-      isLoggingOut
+      isLoggingOut,
+      canEdit: canUserEdit(user)
     }}>
       {children}
     </AuthContext.Provider>

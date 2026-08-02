@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { ACCOUNTS, ALL_LANDINGS, RoleKey } from "./accounts";
+import { ACCOUNTS, ALL_LANDINGS, RoleKey, API_BASE } from "./accounts";
 import { loginAs, clearSession, trackPageErrors } from "./helpers";
 
 const ROLES = Object.keys(ACCOUNTS) as RoleKey[];
@@ -65,7 +65,7 @@ test.describe("Authentication", () => {
 
     // The UI may still mount from the cached user object, but every API call must fail,
     // so no product data can render.
-    const response = await page.request.get("http://localhost:5057/api/Medicine", {
+    const response = await page.request.get(`${API_BASE}/api/Medicine`, {
       headers: { Authorization: "Bearer tampered.jwt.value" },
     });
     expect(response.status()).toBe(401);

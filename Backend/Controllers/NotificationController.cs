@@ -6,6 +6,10 @@ namespace Backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    // Reading is open to any signed-in user, including the read-only HR observer.
+    // The three mutating actions below are not: "views everything, changes nothing"
+    // has to hold even for a user's own notification state, or the rule has exceptions
+    // nobody remembers.
     [Authorize]
     public class NotificationsController : ControllerBase
     {
@@ -60,6 +64,7 @@ namespace Backend.Controllers
         }
 
         [HttpPost("markread")]
+        [Authorize(Roles = Roles.CanManageOwnNotifications)]
         public async Task<IActionResult> MarkRead([FromBody] int[] ids)
         {
             var callerRole = CallerRole;
@@ -71,6 +76,7 @@ namespace Backend.Controllers
         }
 
         [HttpPost("markallread")]
+        [Authorize(Roles = Roles.CanManageOwnNotifications)]
         public async Task<IActionResult> MarkAllRead()
         {
             // The role is taken from the token, never from the query string - otherwise
@@ -84,6 +90,7 @@ namespace Backend.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = Roles.CanManageOwnNotifications)]
         public async Task<IActionResult> Delete(int id)
         {
             var callerRole = CallerRole;

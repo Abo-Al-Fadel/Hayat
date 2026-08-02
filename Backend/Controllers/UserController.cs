@@ -5,7 +5,9 @@ using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+// Authentication only - see the note in SupplierController about cumulative
+// [Authorize] attributes. Reading the staff list is separate from changing it.
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly IUserService _service;
@@ -18,6 +20,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("create")]
+    [Authorize(Roles = Roles.CanManageUsers)]
     public async Task<IActionResult> Create(CreateUserDto dto)
     {
         try
@@ -34,6 +37,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("{userId}")]
+    [Authorize(Roles = Roles.CanManageUsers)]
     public async Task<IActionResult> Delete(string userId)
     {
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -66,6 +70,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = Roles.CanReadUsers)]
     public async Task<IActionResult> GetAll()
     {
         return Ok(await _service.GetAllAsync());
@@ -73,6 +78,7 @@ public class UsersController : ControllerBase
 
     // Updates a user's role.
     [HttpPatch("{userId}/role")]
+    [Authorize(Roles = Roles.CanManageUsers)]
     public async Task<IActionResult> UpdateRole(string userId, [FromBody] UpdateRoleDto dto)
     {
         var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -110,6 +116,7 @@ public class UsersController : ControllerBase
 
     // Updates a user's profile information (username and email).
     [HttpPut("{userId}")]
+    [Authorize(Roles = Roles.CanManageUsers)]
     public async Task<IActionResult> Update(string userId, [FromBody] UpdateUserDto dto)
     {
         try

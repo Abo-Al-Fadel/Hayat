@@ -4,6 +4,8 @@ export const ACCOUNTS = {
   admin: { username: "e2eadmin", password: "E2eAdmin#2026x", role: "Admin", landing: "/admin" },
   pharmacist: { username: "e2epharm", password: "E2ePharm#2026x", role: "Pharmacist", landing: "/pharmacist" },
   storage: { username: "e2estore", password: "E2eStore#2026x", role: "StorageManager", landing: "/storage" },
+  // Read-only observer. Shares the admin dashboard; must not be able to change anything.
+  hr: { username: "e2ehr", password: "E2eHrView#2026x", role: "HR", landing: "/admin" },
 } as const;
 
 export type RoleKey = keyof typeof ACCOUNTS;
@@ -13,6 +15,8 @@ export const ALL_LANDINGS: Record<RoleKey, string> = {
   admin: "/admin",
   pharmacist: "/pharmacist",
   storage: "/storage",
+  // HR deliberately shares /admin, so it is not a page anyone is kept out of.
+  hr: "/admin",
 };
 
 export async function apiLogin(username: string, password: string): Promise<string> {

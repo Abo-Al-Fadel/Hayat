@@ -17,7 +17,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadCatalogue)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? name,
         [FromQuery] decimal? minPrice,
@@ -31,7 +31,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadCatalogue)]
     public async Task<IActionResult> GetById(int id)
     {
         var med = await _medicineService.GetByIdAsync(id, includeCost: User.IsInRole("Admin"));
@@ -65,7 +65,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = Roles.CanManageCatalogue)]
     public async Task<IActionResult> Add([FromForm] CreateMedicineDto dto)
     {
         if (!ModelState.IsValid)
@@ -84,7 +84,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = Roles.CanManageCatalogue)]
     public async Task<IActionResult> Update(int id, [FromForm] UpdateMedicineDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -107,7 +107,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = Roles.CanManageCatalogue)]
     public async Task<IActionResult> Delete(int id)
     {
         try
@@ -122,7 +122,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpGet("search")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadCatalogue)]
     public async Task<IActionResult> Search([FromQuery] string? name)
     {
         var isAdmin = User.IsInRole("Admin");
@@ -131,7 +131,7 @@ public class MedicineController : ControllerBase
         return Ok(medicines);
     }
     [HttpGet("by-category/{categoryId}")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadCatalogue)]
     public async Task<IActionResult> GetByCategory(int categoryId)
     {
         try
@@ -148,7 +148,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpPatch("{id}/visibility")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = Roles.CanManageCatalogue)]
     public async Task<IActionResult> ToggleVisibility(int id, [FromBody] ToggleVisibilityDto dto)
     {
         try
@@ -163,7 +163,7 @@ public class MedicineController : ControllerBase
     }
 
     [HttpPatch("{id}/name")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = Roles.CanManageCatalogue)]
     public async Task<IActionResult> UpdateName(int id, [FromBody] UpdateMedicineNameDto dto)
     {
         if (!ModelState.IsValid)

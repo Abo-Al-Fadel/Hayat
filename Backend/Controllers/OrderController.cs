@@ -13,7 +13,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanSell)]
     public async Task<IActionResult> CreateOrder([FromBody] CheckoutDto dto)
     {
         var result = await _orderService.CreateOrderAsync(dto);
@@ -32,7 +32,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet("{id}/invoice")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadOrders)]
     public async Task<IActionResult> GetInvoice(int id)
     {
         var invoice = await _orderService.GetInvoiceAsync(id);
@@ -41,7 +41,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanReadOrders)]
     public async Task<IActionResult> GetOrders()
     {
         var orders = await _orderService.GetOrdersAsync();
@@ -49,7 +49,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpDelete("{orderId}/item/{itemId}")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanSell)]
     public async Task<IActionResult> RemoveOrderItem(int orderId, int itemId)
     {
         var result = await _orderService.RemoveOrderItemAsync(orderId, itemId);
@@ -59,7 +59,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpPut("{orderId}/item/{itemId}")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanSell)]
     public async Task<IActionResult> UpdateOrderItemQuantity(int orderId, int itemId, [FromBody] UpdateOrderItemDto dto)
     {
         var result = await _orderService.UpdateOrderItemQuantityAsync(orderId, itemId, dto.Quantity);
@@ -69,7 +69,7 @@ public class OrderController : ControllerBase
     }
 
     [HttpDelete("{orderId}")]
-    [Authorize(Roles = "Admin,Pharmacist")]
+    [Authorize(Roles = Roles.CanSell)]
     public async Task<IActionResult> CancelOrder(int orderId)
     {
         var result = await _orderService.CancelOrderAsync(orderId);

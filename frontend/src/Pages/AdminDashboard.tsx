@@ -42,6 +42,7 @@ import {
   StatCard,
   ConfirmModal,
   OrderCalendar,
+  ReadOnlyBanner,
   EMPTY_RANGE,
   isWithinRange,
   isRangeActive,
@@ -49,6 +50,7 @@ import {
   type DateRange,
 } from "../Components/ui";
 import { describePasswordProblems, PASSWORD_HINT } from "../utils/passwordPolicy";
+import { useAuth } from "../Context/AuthContext";
 import {
   Sidebar,
   DashboardHeader,
@@ -136,6 +138,11 @@ export default function AdminDashboard() {
 
   // Active section - initialized from localStorage for persistence
   const [activePage, setActivePage] = useState<PageType>(getPersistedSection);
+
+  // The read-only observer shares this dashboard. This hides controls that would only
+  // fail; the server is what actually refuses the writes.
+  const { canEdit } = useAuth();
+  const readOnly = !canEdit;
   // Mobile navigation drawer (ignored from lg up, where the sidebar is static).
   const [navOpen, setNavOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -1292,6 +1299,8 @@ export default function AdminDashboard() {
         )}
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {readOnly && <ReadOnlyBanner darkMode={darkMode} />}
+
           {/* ─── Products Page ─────────────────────────────────────────────── */}
           {activePage === "products" && (
             <>
@@ -1390,6 +1399,7 @@ export default function AdminDashboard() {
                             }`}>
                               {productCount}
                             </span>
+{!readOnly && (<>
                             <button
                               onClick={() => openEditCategoryModal(cat)}
                               className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
@@ -1409,6 +1419,7 @@ export default function AdminDashboard() {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+</>)}
                           </div>
                         );
                       })}
@@ -1418,12 +1429,14 @@ export default function AdminDashboard() {
               </div>
 
               {/* Add new product form */}
-              <NewProductForm 
-                saving={saving} 
-                darkMode={darkMode} 
-                categories={categories}
-                onAdd={handleAddProduct} 
-              />
+              {!readOnly && (
+                <NewProductForm
+                  saving={saving}
+                  darkMode={darkMode}
+                  categories={categories}
+                  onAdd={handleAddProduct}
+                />
+              )}
 
               {/* Product list */}
               {productsLoading ? (
@@ -1446,6 +1459,7 @@ export default function AdminDashboard() {
                       onDelete={handleDeleteProduct}
                       onImageChange={handleImageChange}
                       onNameChange={handleNameChange}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>
@@ -1538,6 +1552,7 @@ export default function AdminDashboard() {
                     onUpdateStatus={handleUpdateSupplyStockStatus}
                     onDeleteSupplyStock={handleDeleteSupplyStock}
                     onRefresh={handleRefreshSupplyStocks}
+                    readOnly={readOnly}
                   />
                 </div>
 
@@ -1551,6 +1566,7 @@ export default function AdminDashboard() {
                     onAddSupplier={handleAddSupplier}
                     onEditSupplier={handleEditSupplier}
                     onDeleteSupplier={handleDeleteSupplier}
+                    readOnly={readOnly}
                   />
                 </div>
               </div>
@@ -1575,13 +1591,15 @@ export default function AdminDashboard() {
                     <Users className="h-5 w-5 text-purple-600" />
                     User Accounts
                   </h3>
-                  <button
-                    onClick={() => setShowAddUserForm(!showAddUserForm)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add User
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={() => setShowAddUserForm(!showAddUserForm)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add User
+                    </button>
+                  )}
                 </div>
 
                 {/* Add User Form */}
@@ -1701,6 +1719,7 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
+{!readOnly && (<>
                           {/* Role Dropdown - DISTINCT colors: Admin=Red, Pharmacist=Cyan, StorageManager=Orange */}
                           {/* DISABLED for current admin (self-protection) */}
                           <select
@@ -1746,6 +1765,7 @@ export default function AdminDashboard() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+</>)}
                           {/* Self indicator for clarity */}
                           {user.id === currentAdminId && (
                             <span className="text-xs text-gray-500 dark:text-gray-400 italic">(You)</span>

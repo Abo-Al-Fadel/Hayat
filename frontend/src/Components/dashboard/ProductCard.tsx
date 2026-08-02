@@ -34,6 +34,11 @@ interface ProductCardProps {
   onDelete: (id: number, name: string) => void;
   onImageChange: (id: number, file: File) => void;
   onNameChange?: (id: number, newName: string) => Promise<void>;
+  /**
+   * Hides every control that changes the product. The server refuses these writes
+   * regardless; this stops offering actions that can only fail.
+   */
+  readOnly?: boolean;
 }
 
 export function ProductCard({
@@ -46,6 +51,7 @@ export function ProductCard({
   onCategoryChange,
   onToggleHidden,
   onDelete,
+  readOnly = false,
   onImageChange,
   onNameChange,
 }: ProductCardProps) {
@@ -281,7 +287,8 @@ export function ProductCard({
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions - hidden entirely for a read-only observer */}
+      {!readOnly && (
       <div className="flex flex-col items-center justify-end self-end mt-2 gap-2">
         <button
           onClick={() => onToggleHidden(product.id)}
@@ -307,6 +314,7 @@ export function ProductCard({
           <Trash2 className={`h-4 w-4 ${darkMode ? "text-red-400" : "text-red-600"}`} />
         </button>
       </div>
+      )}
     </div>
   );
 }

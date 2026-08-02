@@ -128,6 +128,8 @@ interface SupplyStockPanelProps {
   onUpdateStatus: (id: number, status: SupplyStockStatus) => Promise<void>;
   onDeleteSupplyStock?: (id: number) => Promise<void>; // Delete supply stock (Admin only)
   onRefresh?: () => void; // Optional refresh callback after edit
+  /** Hides every control that changes a supply order. The server refuses them anyway. */
+  readOnly?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +145,7 @@ export function SupplyStockPanel({
   onUpdateStatus,
   onDeleteSupplyStock,
   onRefresh,
+  readOnly = false,
 }: SupplyStockPanelProps) {
   // ─────────────────────────────────────────────────────────────────────────
   // Search & Pagination State
@@ -855,13 +858,15 @@ export function SupplyStockPanel({
             ({filteredStocks.length})
           </span>
         </h3>
-        <button
-          onClick={openCreateForm}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          New Order
-        </button>
+        {!readOnly && (
+          <button
+            onClick={openCreateForm}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New Order
+          </button>
+        )}
       </div>
       {/* Search */}
       <div className={`px-5 py-3 border-b ${darkMode ? "border-gray-700" : "border-gray-200"}`}>

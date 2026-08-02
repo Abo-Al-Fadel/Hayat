@@ -4,7 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+// Authentication only. Do NOT put a role list here: [Authorize] attributes are
+// cumulative, so a controller-level role silently narrows every action beneath it and
+// no action-level grant can widen it back. Each action states its own policy.
+[Authorize]
 public class SupplierController : ControllerBase
 {
     private readonly ISupplierService _service;
@@ -15,6 +18,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = Roles.CanManageSuppliers)]
     public async Task<IActionResult> Create(CreateSupplierDto dto)
     {
         // Responds with the whole supplier: the client adds it straight to its list,
@@ -24,6 +28,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Roles = Roles.CanManageSuppliers)]
     public async Task<IActionResult> Update(int id, UpdateSupplierDto dto)
     {
         var updated = await _service.UpdateAsync(id, dto);
@@ -34,6 +39,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Roles = Roles.CanManageSuppliers)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _service.DeleteAsync(id);
@@ -43,6 +49,7 @@ public class SupplierController : ControllerBase
         return Ok("Supplier deleted successfully");
     }
     [HttpGet]
+    [Authorize(Roles = Roles.CanReadSuppliers)]
     public async Task<IActionResult> GetAll()
     {
         var suppliers = await _service.GetAllAsync();
@@ -50,6 +57,7 @@ public class SupplierController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize(Roles = Roles.CanReadSuppliers)]
     public async Task<IActionResult> GetById(int id)
     {
         var supplier = await _service.GetByIdAsync(id);

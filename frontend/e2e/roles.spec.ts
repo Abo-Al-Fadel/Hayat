@@ -6,7 +6,9 @@ const ROLES = Object.keys(ACCOUNTS) as RoleKey[];
 
 test.describe("Role isolation", () => {
   for (const role of ROLES) {
-    const foreign = ROLES.filter((r) => r !== role);
+    // Compare by landing page, not by role: HR deliberately shares /admin with Admin,
+    // so that route is not "another role's dashboard" for either of them.
+    const foreign = ROLES.filter((r) => ALL_LANDINGS[r] !== ALL_LANDINGS[role]);
 
     test(`${role} cannot open another role's dashboard`, async ({ page }) => {
       await clearSession(page);

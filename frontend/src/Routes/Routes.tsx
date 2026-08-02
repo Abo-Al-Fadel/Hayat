@@ -23,7 +23,10 @@ export const router = createBrowserRouter([
       {
         path: "admin", // /admin
         element: (
-          <ProtectedRoute allowedRoles={["Admin"]}>
+          // HR is the read-only observer: same pages as an Admin, no controls that
+          // change anything. What actually stops it writing is server-side; see
+          // Roles in the backend and RoleAuthorizationTests.
+          <ProtectedRoute allowedRoles={["Admin", "HR"]}>
             <AdminDashboard />
           </ProtectedRoute>
         ),
