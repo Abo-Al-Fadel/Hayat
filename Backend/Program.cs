@@ -5,13 +5,61 @@ using System.Text;
 using Microsoft.OpenApi.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Backend.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Hosted platforms (Render, Railway, Fly, Heroku) hand the container a port in $PORT
+// and route to it. Without this the app listens on its own default and the platform
+// reports the deploy as unhealthy.
+var assignedPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(assignedPort))
+{
+    builder.WebHost.UseUrls($"http://+:{assignedPort}");
+}
+
 // Bind JwtSettings from configuration to an instance
 var jwtSettings = builder.Configuration
                         .GetSection("JwtSettings")
                         .Get<JwtSettings>() ?? throw new Exception("JWT settings not configured");
+
+// The signing key is the whole of the API's security: anyone holding it can mint a
+// token for any role. Outside Development, refuse to start on a key that is missing,
+// short, or one of the values that has ever been committed to this repository.
+// Failing at start-up is loud; a weak key in production is silent.
+ValidateSigningKey(jwtSettings.Key, builder.Environment.IsDevelopment());
+
+static void ValidateSigningKey(string? key, bool isDevelopment)
+{
+    // Anything ever exposed in source control or in a public artifact. Rotating away
+    // from these is mandatory - see DEPLOYMENT.md.
+    string[] burned =
+    {
+        "HayaaPharmacyMostSecretKeyEverCreated!",
+        "HayatPharmacyMostSecretKeyEverCreated!"
+    };
+
+    if (string.IsNullOrWhiteSpace(key))
+        throw new InvalidOperationException(
+            "JwtSettings:Key is not configured. Set the JwtSettings__Key environment variable.");
+
+    if (burned.Contains(key))
+        throw new InvalidOperationException(
+            "JwtSettings:Key is a known-compromised value from this repository's history. Generate a new one.");
+
+    if (isDevelopment) return;
+
+    // HMAC-SHA256 keys shorter than the 256-bit hash output weaken the signature, and
+    // .NET refuses them outright. 32 bytes of UTF-8 is the floor; 64 is the recommendation.
+    if (System.Text.Encoding.UTF8.GetByteCount(key) < 32)
+        throw new InvalidOperationException(
+            "JwtSettings:Key must be at least 32 bytes (use 64+). Generate one with: openssl rand -base64 48");
+
+    if (key.Distinct().Count() < 16)
+        throw new InvalidOperationException(
+            "JwtSettings:Key has too little variety to be a random key. Generate one with: openssl rand -base64 48");
+}
 
 // Add services
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
@@ -106,6 +154,18 @@ builder.Services.AddAuthentication(options =>
 // Authorization
 builder.Services.AddAuthorization();
 
+// Behind a platform load balancer the app sees plain HTTP from an arbitrary internal
+// address. Without trusting the forwarded headers, UseHttpsRedirection sees "http",
+// redirects, the proxy forwards the redirect back as http, and the browser loops.
+// The default only trusts loopback proxies, so the known lists must be cleared - the
+// platform edge is the only ingress, so nothing else can reach the container to spoof them.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // CORS - allowed origins come from configuration (Cors:AllowedOrigins) so a deployed
 // environment can point at its real frontend host instead of hardcoded localhost ports.
 // SignalR needs AllowCredentials(), which cannot be combined with AllowAnyOrigin(),
@@ -147,8 +207,24 @@ var app = builder.Build();
 // Global exception handler - must be first so it wraps everything downstream.
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
+// Must run before anything reads the scheme or the client address.
+app.UseForwardedHeaders();
+
+// Tells browsers to refuse plain HTTP to this host on every later visit. The platform
+// edge already terminates TLS; this closes the first-request gap it cannot.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseStaticFiles();
 app.UseHttpsRedirection();
+
+// Liveness probe. Anonymous and dependency-free on purpose: hosting platforms poll it
+// to decide whether the deploy succeeded, and a probe that needs the database would
+// report the whole service dead during a transient database blip.
+app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNow }))
+   .AllowAnonymous();
 
 // DB init - single scoped call
 using (var scope = app.Services.CreateScope())

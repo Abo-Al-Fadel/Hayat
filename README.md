@@ -209,18 +209,35 @@ E2E_BOOTSTRAP_USER=admin E2E_BOOTSTRAP_PASS='...' npx playwright test
 
 ---
 
-## 📦 Deployment checklist
+## 📦 Deployment
+
+**[DEPLOYMENT.md](DEPLOYMENT.md)** has step-by-step instructions for a free deployment
+(Azure SQL + Render + Cloudflare Pages), including **[how to rotate the JWT signing
+key](DEPLOYMENT.md#rotating-the-jwt-key)** — which must be done before the first deploy,
+because the original key was committed to this repository's history.
+
+Checklist, if you are deploying somewhere else:
 
 - [ ] `ConnectionStrings:DefaultConnection` set for the target environment
 - [ ] `JwtSettings:Key` is a fresh, long random value — **never reuse a key that has been in source control**
 - [ ] `Cors:AllowedOrigins` set to the real frontend origin(s); never `*`
 - [ ] `ASPNETCORE_ENVIRONMENT=Production` (this disables Swagger)
-- [ ] `dotnet ef database update` run against the target database
 - [ ] An Admin account exists; `BootstrapAdmin:*` removed afterwards
 - [ ] HTTPS enforced at the host/reverse proxy
 - [ ] `frontend/.env` `REACT_APP_API_BASE` points at the deployed API
 - [ ] `npm run build` output served as a SPA (all unknown paths → `index.html`)
 - [ ] `Backend/wwwroot/images/medicines` is writable and persisted (uploaded images live there)
+
+Migrations no longer need a separate `dotnet ef database update`: the API applies any
+pending migration on start-up and logs what it applied, so a hosted database that cannot
+easily be reached from a developer machine still ends up on the right schema.
+
+The API refuses to start on a missing, short, low-entropy or known-compromised
+`JwtSettings:Key`, and outside Development on a missing `Cors:AllowedOrigins`. A
+misconfigured deploy fails loudly rather than running insecurely.
+
+`GET /health` is anonymous and touches no dependencies — point the platform's health
+check at it.
 
 ### Build & publish
 

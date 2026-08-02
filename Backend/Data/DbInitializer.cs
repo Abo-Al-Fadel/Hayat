@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 public static class DbInitializer
 {
@@ -6,6 +7,21 @@ public static class DbInitializer
     {
         using var scope = serviceProvider.CreateScope();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
+
+        // Bring the schema up to date before anything touches it. A hosted database
+        // cannot easily be reached with `dotnet ef database update`, and a schema left
+        // a migration behind fails at read time with an unhelpful "failed to load"
+        // rather than at start-up. EF takes an advisory lock, so a restart during a
+        // migration is safe.
+        var context = scope.ServiceProvider.GetRequiredService<PharmacyDbContext>();
+        var pending = (await context.Database.GetPendingMigrationsAsync()).ToList();
+        if (pending.Count > 0)
+        {
+            logger.LogInformation("Applying {Count} pending migration(s): {Migrations}",
+                pending.Count, string.Join(", ", pending));
+            await context.Database.MigrateAsync();
+        }
 
         var roles = Enum.GetNames<AppRole>();
 
