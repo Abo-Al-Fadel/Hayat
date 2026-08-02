@@ -68,17 +68,27 @@ public class StatsController : ControllerBase
     /// order form previously defaulted the purchase price to the retail price, which
     /// implied a zero margin on every restock.
     /// </summary>
+    /// <summary>Largest order this endpoint will price. No pharmacy orders more.</summary>
+    public const int MaxOrderQuantity = 1_000_000;
+
     [HttpGet("suggest-purchase-price")]
-    public IActionResult SuggestPurchasePrice([FromQuery] decimal sellPrice, [FromQuery] int quantity = 1)
+    // Bound as long, not int: a quantity above int.MaxValue used to fail model binding
+    // before reaching this method, producing a framework 400 with no usable message -
+    // so the UI simply lost the price with nothing to show the user. Taking a long lets
+    // an out-of-range value be rejected here, with a reason.
+    public IActionResult SuggestPurchasePrice([FromQuery] decimal sellPrice, [FromQuery] long quantity = 1)
     {
         if (sellPrice < 0)
             return BadRequest(new { error = "Sell price cannot be negative." });
         if (quantity < 1)
             return BadRequest(new { error = "Quantity must be at least 1." });
+        if (quantity > MaxOrderQuantity)
+            return BadRequest(new { error = $"Quantity cannot exceed {MaxOrderQuantity:N0} units." });
 
+        var order = (int)quantity;  // safe: bounded above
         var basePrice = _pricing.SuggestPurchasePrice(sellPrice);
-        var discountPercent = _pricing.GetVolumeDiscountPercent(quantity);
-        var unitPrice = _pricing.SuggestPurchasePrice(sellPrice, quantity);
+        var discountPercent = _pricing.GetVolumeDiscountPercent(order);
+        var unitPrice = _pricing.SuggestPurchasePrice(sellPrice, order);
 
         return Ok(new
         {

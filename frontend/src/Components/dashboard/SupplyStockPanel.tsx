@@ -97,7 +97,23 @@ interface FormItem extends SupplyStockItem {
   purchasePrice: number;  // Price paid to supplier (editable when status === "Created")
   sellingPrice: number;   // Product selling price (read-only reference)
   image?: string;         // Medicine image for display
+  /**
+   * True once the admin has typed their own purchase price for this line. Until then
+   * the price follows the suggestion, and re-prices when the quantity changes, because
+   * the bulk discount depends on order size. After an override it is left alone -
+   * a negotiated price must not be silently replaced.
+   */
+  priceOverridden?: boolean;
 }
+
+/**
+ * Ceiling on a single line's quantity, mirroring StatsController.MaxOrderQuantity.
+ *
+ * Above int.MaxValue the pricing request failed model binding server-side and the
+ * suggested price simply vanished from the form with no explanation. A limit that
+ * matches the server keeps the failure from ever being reached, and states the rule.
+ */
+const MAX_ORDER_QUANTITY = 1_000_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props Interface
@@ -169,16 +185,20 @@ export function SupplyStockPanel({
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(false);
   const [selectedMedicineId, setSelectedMedicineId] = useState<number | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
-  // Purchase price for the item being added. Left at 0 until the admin types a value,
-  // in which case the suggested supplier price is used instead.
+  // Purchase price for the item being added. Prefilled from the suggestion as soon as
+  // one arrives, so the common case needs no interaction - the admin previously had to
+  // click a "use $X" button, and the field sat empty until they did.
   const [selectedPurchasePrice, setSelectedPurchasePrice] = useState<number>(0);
+  // Set once the admin types their own price. From then on the suggestion is shown for
+  // comparison but never written over what they entered.
+  const [priceOverridden, setPriceOverridden] = useState(false);
   const [suggestion, setSuggestion] = useState<PurchasePriceSuggestion | null>(null);
 
   // Ask the server what this should cost from a supplier, for this order size.
   // Debounced because quantity is a free-text number input.
   useEffect(() => {
     const medicine = medicines.find((m) => m.id === selectedMedicineId);
-    if (!medicine || selectedQuantity < 1) {
+    if (!medicine || selectedQuantity < 1 || selectedQuantity > MAX_ORDER_QUANTITY) {
       setSuggestion(null);
       return;
     }
@@ -187,7 +207,14 @@ export function SupplyStockPanel({
     const timer = setTimeout(async () => {
       try {
         const result = await suggestPurchasePrice(medicine.price, selectedQuantity);
-        if (!cancelled) setSuggestion(result);
+        if (cancelled) return;
+        setSuggestion(result);
+        // Follow the suggestion until the admin overrides it. The bulk discount moves
+        // with quantity, so the price has to move with it too.
+        setPriceOverridden((overridden) => {
+          if (!overridden) setSelectedPurchasePrice(result.suggestedUnitPrice);
+          return overridden;
+        });
       } catch {
         if (!cancelled) setSuggestion(null);
       }
@@ -198,6 +225,12 @@ export function SupplyStockPanel({
       clearTimeout(timer);
     };
   }, [selectedMedicineId, selectedQuantity, medicines]);
+
+  // A different medicine means a different price; start following the suggestion again.
+  useEffect(() => {
+    setPriceOverridden(false);
+    setSelectedPurchasePrice(0);
+  }, [selectedMedicineId]);
 
   // Action loading state
   const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -392,6 +425,7 @@ export function SupplyStockPanel({
         purchasePrice: purchasePrice,   // What we pay to supplier (editable)
         sellingPrice: medicine.price,   // What we sell to customers (reference only)
         image: medicine.image,
+        priceOverridden,                // carry the admin's intent onto the line
       },
     ]);
 
@@ -399,9 +433,10 @@ export function SupplyStockPanel({
     setSelectedMedicineId(null);
     setSelectedQuantity(1);
     setSelectedPurchasePrice(0);
+    setPriceOverridden(false);
     setMedicineSearch("");
     setShowMedicineDropdown(false);
-  }, [selectedMedicineId, selectedQuantity, selectedPurchasePrice, medicines, formItems, suggestion?.suggestedUnitPrice]);
+  }, [selectedMedicineId, selectedQuantity, selectedPurchasePrice, priceOverridden, medicines, formItems, suggestion?.suggestedUnitPrice]);
 
   /**
    * Change the medicine for an existing item
@@ -443,14 +478,57 @@ export function SupplyStockPanel({
    * Update quantity for an item
    * EDITABLE RULE: Only when status === "Created"
    * Automatically recalculates line total (purchasePrice × quantity)
+   *
+   * Changing the quantity also re-prices the line, because the bulk discount depends
+   * on order size - ordering ten times as many and paying the single-unit price would
+   * quietly understate the margin on every restock. A line whose price the admin typed
+   * themselves is left alone.
    */
+  const repriceTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
   const handleUpdateQuantity = useCallback((medicineId: number, quantity: number) => {
-    if (quantity <= 0) return;
+    if (quantity <= 0 || quantity > MAX_ORDER_QUANTITY) return;
+
     setFormItems((prev) =>
       prev.map((item) =>
         item.medicineId === medicineId ? { ...item, quantity } : item
       )
     );
+
+    // Debounced per line: the quantity box fires on every keystroke.
+    const timers = repriceTimers.current;
+    clearTimeout(timers.get(medicineId));
+    timers.set(
+      medicineId,
+      setTimeout(async () => {
+        timers.delete(medicineId);
+        const medicine = medicines.find((m) => m.id === medicineId);
+        if (!medicine) return;
+
+        try {
+          const result = await suggestPurchasePrice(medicine.price, quantity);
+          setFormItems((prev) =>
+            prev.map((item) =>
+              item.medicineId === medicineId && !item.priceOverridden
+                ? { ...item, purchasePrice: result.suggestedUnitPrice, unitPrice: result.suggestedUnitPrice }
+                : item
+            )
+          );
+        } catch {
+          // Keep the existing price: a failed lookup is no reason to change what the
+          // order says it costs.
+        }
+      }, 400)
+    );
+  }, [medicines]);
+
+  // Cancel any in-flight re-price when the panel unmounts.
+  useEffect(() => {
+    const timers = repriceTimers.current;
+    return () => {
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
 
   /**
@@ -466,8 +544,10 @@ export function SupplyStockPanel({
     if (price < 0) return;
     setFormItems((prev) =>
       prev.map((item) =>
-        item.medicineId === medicineId 
-          ? { ...item, unitPrice: price, purchasePrice: price }  // Sync both fields
+        item.medicineId === medicineId
+          // priceOverridden stops the quantity re-pricing above from replacing a price
+          // the admin typed - a negotiated rate must survive a quantity change.
+          ? { ...item, unitPrice: price, purchasePrice: price, priceOverridden: true }
           : item
       )
     );
@@ -947,34 +1027,62 @@ export function SupplyStockPanel({
                   min="0"
                   step="0.01"
                   value={selectedPurchasePrice || ""}
-                  onChange={(e) => setSelectedPurchasePrice(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    setSelectedPurchasePrice(parseFloat(e.target.value) || 0);
+                    // From here on this is the admin's number, not the suggestion's.
+                    setPriceOverridden(true);
+                  }}
+                  aria-label="Purchase price"
                   placeholder={suggestion ? suggestion.suggestedUnitPrice.toFixed(2) : "Price"}
                   className={`w-24 px-2 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                    darkMode 
-                      ? "bg-gray-800 border-gray-600 text-gray-100" 
+                    darkMode
+                      ? "bg-gray-800 border-gray-600 text-gray-100"
                       : "bg-white border-gray-300"
                   }`}
                 />
                 {suggestion && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPurchasePrice(suggestion.suggestedUnitPrice)}
-                    title={
-                      `Sells for $${suggestion.sellPrice.toFixed(2)}. ` +
-                      `Suggested supplier price $${suggestion.basePurchasePrice.toFixed(2)}` +
-                      (suggestion.volumeDiscountPercent > 0
-                        ? `, less ${suggestion.volumeDiscountPercent}% bulk discount at ${suggestion.quantity} units ` +
-                          `= $${suggestion.suggestedUnitPrice.toFixed(2)} (saves $${suggestion.savingsVsBase.toFixed(2)}).`
-                        : ".") +
-                      " Click to use."
-                    }
-                    className="text-[10px] mt-0.5 text-purple-500 hover:text-purple-400 text-left leading-tight"
-                  >
-                    use ${suggestion.suggestedUnitPrice.toFixed(2)}
-                    {suggestion.volumeDiscountPercent > 0 && (
-                      <span className="text-emerald-500"> −{suggestion.volumeDiscountPercent}%</span>
-                    )}
-                  </button>
+                  priceOverridden ? (
+                    // Only offered once the admin has departed from it - the field is
+                    // prefilled with the suggestion otherwise, so there is nothing to apply.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPurchasePrice(suggestion.suggestedUnitPrice);
+                        setPriceOverridden(false);
+                      }}
+                      title={
+                        `Sells for $${suggestion.sellPrice.toFixed(2)}. ` +
+                        `Suggested supplier price $${suggestion.basePurchasePrice.toFixed(2)}` +
+                        (suggestion.volumeDiscountPercent > 0
+                          ? `, less ${suggestion.volumeDiscountPercent}% bulk discount at ${suggestion.quantity} units ` +
+                            `= $${suggestion.suggestedUnitPrice.toFixed(2)} (saves $${suggestion.savingsVsBase.toFixed(2)}).`
+                          : ".") +
+                        " Click to go back to it."
+                      }
+                      className="text-[10px] mt-0.5 text-purple-500 hover:text-purple-400 text-left leading-tight"
+                    >
+                      reset to ${suggestion.suggestedUnitPrice.toFixed(2)}
+                      {suggestion.volumeDiscountPercent > 0 && (
+                        <span className="text-emerald-500"> −{suggestion.volumeDiscountPercent}%</span>
+                      )}
+                    </button>
+                  ) : (
+                    <span
+                      className="text-[10px] mt-0.5 text-gray-400 text-left leading-tight"
+                      title={
+                        `Sells for $${suggestion.sellPrice.toFixed(2)}. ` +
+                        `Suggested supplier price $${suggestion.basePurchasePrice.toFixed(2)}` +
+                        (suggestion.volumeDiscountPercent > 0
+                          ? `, less ${suggestion.volumeDiscountPercent}% bulk discount at ${suggestion.quantity} units.`
+                          : ".")
+                      }
+                    >
+                      suggested
+                      {suggestion.volumeDiscountPercent > 0 && (
+                        <span className="text-emerald-500"> −{suggestion.volumeDiscountPercent}%</span>
+                      )}
+                    </span>
+                  )
                 )}
               </div>
 
@@ -986,15 +1094,29 @@ export function SupplyStockPanel({
                 <input
                   type="number"
                   min="1"
+                  max={MAX_ORDER_QUANTITY}
                   value={selectedQuantity}
-                  onChange={(e) => setSelectedQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                  aria-label="Order quantity"
+                  onChange={(e) =>
+                    // Clamped rather than validated after the fact: a quantity beyond
+                    // this could not be priced at all, and the form silently lost the
+                    // suggested price instead of saying why.
+                    setSelectedQuantity(
+                      Math.min(MAX_ORDER_QUANTITY, Math.max(1, parseInt(e.target.value) || 1))
+                    )
+                  }
                   placeholder="Qty"
                   className={`w-20 px-2 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                    darkMode 
-                      ? "bg-gray-800 border-gray-600 text-gray-100" 
+                    darkMode
+                      ? "bg-gray-800 border-gray-600 text-gray-100"
                       : "bg-white border-gray-300"
                   }`}
                 />
+                {selectedQuantity >= MAX_ORDER_QUANTITY && (
+                  <span className="text-[10px] mt-0.5 text-amber-500 leading-tight">
+                    max {MAX_ORDER_QUANTITY.toLocaleString()}
+                  </span>
+                )}
               </div>
               
               {/* Add Button - self-aligns to bottom of row */}
@@ -1127,8 +1249,15 @@ export function SupplyStockPanel({
                                 <input
                                   type="number"
                                   min="1"
+                                  max={MAX_ORDER_QUANTITY}
                                   value={item.quantity}
-                                  onChange={(e) => handleUpdateQuantity(item.medicineId, parseInt(e.target.value) || 1)}
+                                  aria-label={`Quantity for ${item.medicineName}`}
+                                  onChange={(e) =>
+                                    handleUpdateQuantity(
+                                      item.medicineId,
+                                      Math.min(MAX_ORDER_QUANTITY, parseInt(e.target.value) || 1)
+                                    )
+                                  }
                                   className={`w-20 px-2 py-1 text-sm rounded-lg border text-center ${
                                     darkMode 
                                       ? "bg-gray-600 border-gray-500 text-gray-100" 

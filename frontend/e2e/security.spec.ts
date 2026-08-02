@@ -277,6 +277,10 @@ test.describe("Business rules that protect stock and money", () => {
       "/api/Stats/suggest-purchase-price?sellPrice=-1",
       "/api/Stats/suggest-purchase-price?sellPrice=50&quantity=0",
       "/api/Stats/suggest-purchase-price?sellPrice=50&quantity=-5",
+      // Beyond int.MaxValue this failed model binding, so the caller got a framework
+      // 400 with no message and the admin form silently lost its suggested price.
+      "/api/Stats/suggest-purchase-price?sellPrice=50&quantity=9999999999",
+      "/api/Stats/suggest-purchase-price?sellPrice=50&quantity=1000001",
       "/api/Stats/suggest-price?cost=-1",
       "/api/Stats/financial?from=2030-01-01&to=2020-01-01",
     ];
@@ -284,6 +288,28 @@ test.describe("Business rules that protect stock and money", () => {
       const res = await request.get(`${API_BASE}${path}`, { headers: await auth("admin") });
       expect(res.status(), path).toBe(400);
     }
+  });
+  test("an over-large quantity is refused with a usable message", async ({ request }) => {
+    const res = await request.get(
+      `${API_BASE}/api/Stats/suggest-purchase-price?sellPrice=50&quantity=9999999999`,
+      { headers: await auth("admin") }
+    );
+
+    expect(res.status()).toBe(400);
+    // The UI shows this; a bare 400 left the user staring at a vanished price.
+    expect(JSON.stringify(await res.json())).toMatch(/quantity/i);
+  });
+
+  test("the largest allowed quantity is still priced", async ({ request }) => {
+    const res = await request.get(
+      `${API_BASE}/api/Stats/suggest-purchase-price?sellPrice=50&quantity=1000000`,
+      { headers: await auth("admin") }
+    );
+
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body.suggestedUnitPrice).toBeGreaterThan(0);
+    expect(body.suggestedUnitPrice).toBeLessThan(50);
   });
 });
 
