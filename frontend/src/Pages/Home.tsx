@@ -28,7 +28,7 @@ const Home = () => {
 
   return (
     <div className="relative bg-homepage min-h-screen text-white px-4 sm:px-6 md:px-14">
-      <PublicHeader active="products" />
+      <PublicHeader />
         {/* Slogan under nav */}
         <div className="text-center mt-6 md:mt-10 max-w-lg mx-auto">
         <p className="italic text-gray-200/70 text-xl md:text-2xl font-serif leading-snug md:leading-relaxed relative">

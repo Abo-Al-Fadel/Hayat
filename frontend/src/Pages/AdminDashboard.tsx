@@ -38,7 +38,16 @@ import {
 } from "../hooks";
 
 // Components
-import { StatCard, ConfirmModal } from "../Components/ui";
+import {
+  StatCard,
+  ConfirmModal,
+  DateRangeFilter,
+  EMPTY_RANGE,
+  isWithinRange,
+  isRangeActive,
+  type DateRange,
+} from "../Components/ui";
+import { describePasswordProblems, PASSWORD_HINT } from "../utils/passwordPolicy";
 import {
   Sidebar,
   DashboardHeader,
@@ -129,10 +138,15 @@ export default function AdminDashboard() {
   // Mobile navigation drawer (ignored from lg up, where the sidebar is static).
   const [navOpen, setNavOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterHidden, setFilterHidden] = useState<"all" | "visible" | "hidden">("all");
+  // Defaults to the active catalogue: a deleted-but-archived medicine (one referenced
+  // by past orders) would otherwise remain on screen and look like the delete failed.
+  // Switch to "hidden" or "all" to see archived items.
+  const [filterHidden, setFilterHidden] = useState<"all" | "visible" | "hidden">("visible");
   
   // Search states for Orders and Users pages
   const [ordersSearchTerm, setOrdersSearchTerm] = useState("");
+  // Date filter for the orders/invoices list.
+  const [ordersDateRange, setOrdersDateRange] = useState<DateRange>(EMPTY_RANGE);
   const [usersSearchTerm, setUsersSearchTerm] = useState("");
   
   // ──────────────────────────────────────────────────────────────────────────
@@ -655,8 +669,11 @@ export default function AdminDashboard() {
       toast.error("Invalid email format");
       return;
     }
-    if (!newUserForm.password.trim() || newUserForm.password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    // Validated against the same rules the server enforces, so the form and the API
+    // can no longer disagree about what a valid password is.
+    const passwordProblem = describePasswordProblems(newUserForm.password);
+    if (passwordProblem) {
+      toast.error(passwordProblem);
       return;
     }
     // Check for duplicate username
@@ -1051,13 +1068,25 @@ export default function AdminDashboard() {
   // Clear filters handler - resets all product filters including multi-category
   // ──────────────────────────────────────────────────────────────────────────
   const clearFilters = useCallback(() => {
-    setFilterHidden("all");
+    setFilterHidden("visible");
     setSelectedCategories(new Set()); // Clear multi-category filter
     setSearchTerm("");
   }, []);
 
   // Check if any filter is active - includes multi-category selection
-  const hasActiveFilters = filterHidden !== "all" || selectedCategories.size > 0 || searchTerm !== "";
+  const hasActiveFilters = filterHidden !== "visible" || selectedCategories.size > 0 || searchTerm !== "";
+
+  /** Orders after both the text search and the date-range filter. */
+  const visibleOrders = useMemo(() => {
+    const term = ordersSearchTerm.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesTerm =
+        !term ||
+        order.id.toString().includes(term) ||
+        order.totalPrice.toString().includes(term);
+      return matchesTerm && isWithinRange(order.createdAt, ordersDateRange);
+    });
+  }, [orders, ordersSearchTerm, ordersDateRange]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Derived data
@@ -1413,12 +1442,16 @@ export default function AdminDashboard() {
           {/* ─── Orders Page ───────────────────────────────────────────────── */}
           {activePage === "orders" && (
             <>
-              <div className="mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <StatCard label="Total Orders" value={orders.length} />
+                <StatCard
+                  label={isRangeActive(ordersDateRange) ? "Orders in range" : "Shown"}
+                  value={visibleOrders.length}
+                />
               </div>
 
               {/* Orders Search */}
-              <div className="mb-4">
+              <div className="mb-3">
                 <input
                   type="text"
                   placeholder="Search orders by ID or total..."
@@ -1428,22 +1461,29 @@ export default function AdminDashboard() {
                 />
               </div>
 
+              {/* Date filter */}
+              <div className="mb-4 p-3 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+                <DateRangeFilter
+                  value={ordersDateRange}
+                  onChange={setOrdersDateRange}
+                  darkMode={darkMode}
+                  summary={
+                    isRangeActive(ordersDateRange)
+                      ? `${visibleOrders.length} of ${orders.length} orders`
+                      : undefined
+                  }
+                />
+              </div>
+
               {ordersLoading ? (
                 <div className="text-center text-gray-500">Loading orders...</div>
-              ) : orders.length === 0 ? (
-                <div className="text-center text-gray-500">No orders found</div>
+              ) : visibleOrders.length === 0 ? (
+                <div className="text-center text-gray-500">
+                  {orders.length === 0 ? "No orders found" : "No orders match these filters"}
+                </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {orders
-                    .filter((order) => {
-                      if (!ordersSearchTerm.trim()) return true;
-                      const term = ordersSearchTerm.toLowerCase();
-                      return (
-                        order.id.toString().includes(term) ||
-                        order.totalPrice.toString().includes(term)
-                      );
-                    })
-                    .map((order) => (
+                  {visibleOrders.map((order) => (
                       <OrderListItem key={order.id} order={order} onView={fetchOrderDetail} />
                     ))}
                 </div>
@@ -1538,13 +1578,22 @@ export default function AdminDashboard() {
                         onChange={(e) => setNewUserForm((prev) => ({ ...prev, userName: e.target.value }))}
                         className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       />
-                      <input
-                        type="password"
-                        placeholder="Password * (min 6 chars, A-z, 0-9, special char)"
-                        value={newUserForm.password}
-                        onChange={(e) => setNewUserForm((prev) => ({ ...prev, password: e.target.value }))}
-                        className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
+                      <div className="flex flex-col">
+                        <input
+                          type="password"
+                          placeholder="Password *"
+                          aria-describedby="new-user-password-hint"
+                          value={newUserForm.password}
+                          onChange={(e) => setNewUserForm((prev) => ({ ...prev, password: e.target.value }))}
+                          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                        <p
+                          id="new-user-password-hint"
+                          className="text-xs text-gray-500 dark:text-gray-400 mt-1"
+                        >
+                          {PASSWORD_HINT}
+                        </p>
+                      </div>
                       <input
                         type="email"
                         placeholder="Email *"

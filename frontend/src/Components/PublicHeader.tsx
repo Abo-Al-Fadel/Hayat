@@ -8,8 +8,14 @@ import hayat from "../Images/HTL.png";
 export const FaUserCircle = (props: React.SVGProps<SVGSVGElement>) => FaUserCircleRaw(props);
 
 interface PublicHeaderProps {
-  /** Highlights the current destination in the nav. */
-  active?: "products" | "contact";
+  /**
+   * Highlights the nav entry for the page being viewed.
+   *
+   * Only "contact" is a public page. "Products" leads into a role dashboard, so it is
+   * never the current public route - marking it active on the home page made it look
+   * as though you were already on a products page.
+   */
+  active?: "contact";
 }
 
 /**
@@ -69,7 +75,8 @@ export function PublicHeader({ active }: PublicHeaderProps) {
 
       {/* Centre nav - in flow on mobile, absolutely centred from md up */}
       <nav className="order-3 w-full flex justify-center gap-3 md:order-none md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2 md:top-8">
-        <button className={navButton(active === "products")} onClick={goToApp}>
+        {/* Never marked active: it leads into a dashboard, not a public page. */}
+        <button className={navButton(false)} onClick={goToApp}>
           Products
         </button>
         <button className={navButton(active === "contact")} onClick={() => navigate("/contact")}>

@@ -108,7 +108,7 @@ export function ProductCard({
   const isLowStock = product.stock < LOW_STOCK_THRESHOLD;
 
   const bgClass = product.hidden
-    ? "opacity-60"
+    ? "opacity-60 ring-1 ring-amber-400/60"
     : darkMode
     ? "bg-gray-900"
     : "bg-white";
@@ -185,7 +185,17 @@ export function ProductCard({
           </div>
         ) : (
           <div className="flex items-center gap-2 group/name">
-            <h3 className="font-semibold text-base truncate">{product.name}</h3>
+            <div className="flex items-center gap-2 min-w-0">
+              <h3 className="font-semibold text-base truncate">{product.name}</h3>
+              {product.hidden && (
+                <span
+                  className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                  title="Not on sale. Archived medicines are kept because they appear on past orders."
+                >
+                  Hidden
+                </span>
+              )}
+            </div>
             {onNameChange && (
               <button
                 onClick={handleStartEditName}
