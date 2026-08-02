@@ -9,7 +9,13 @@ public class SupplierService : ISupplierService
         _context = context;
     }
 
-    public async Task<int> CreateAsync(CreateSupplierDto dto)
+    /// <summary>
+    /// Returns the created supplier rather than just its id. A caller that only gets
+    /// an id has to either re-fetch the list or invent a placeholder object - and the
+    /// admin panel did the latter, appending a row whose name was undefined, which
+    /// then crashed the edit form.
+    /// </summary>
+    public async Task<SupplierDto> CreateAsync(CreateSupplierDto dto)
     {
         var supplier = new Supplier
         {
@@ -21,7 +27,13 @@ public class SupplierService : ISupplierService
         _context.Suppliers.Add(supplier);
         await _context.SaveChangesAsync();
 
-        return supplier.Id;
+        return new SupplierDto
+        {
+            Id = supplier.Id,
+            Name = supplier.Name,
+            Phone = supplier.Phone,
+            Email = supplier.Email
+        };
     }
 
     public async Task<SupplierDto?> UpdateAsync(int id, UpdateSupplierDto dto)

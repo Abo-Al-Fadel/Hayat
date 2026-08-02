@@ -1,6 +1,6 @@
 public interface ISupplierService
 {
-    Task<int> CreateAsync(CreateSupplierDto dto);
+    Task<SupplierDto> CreateAsync(CreateSupplierDto dto);
     Task<SupplierDto?> UpdateAsync(int id, UpdateSupplierDto dto);
     Task<bool> DeleteAsync(int id);
     Task<List<SupplierDto>> GetAllAsync();

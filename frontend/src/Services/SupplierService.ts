@@ -29,10 +29,26 @@ export const getSupplierById = async (id: number): Promise<Supplier> => {
 };
 
 // CREATE supplier
+//
+// The API returns the whole created supplier. It used to return only { id }, while
+// this signature still promised a Supplier - so callers appended an object with an
+// undefined name to their list and TypeScript raised nothing. The normalise call is
+// belt and braces: a partial response now yields empty strings rather than a crash
+// the next time something calls .trim() on a field.
 export const createSupplier = async (supplier: Omit<Supplier, "id">): Promise<Supplier> => {
   const response = await api.post("/api/Supplier", supplier);
-  return response.data;
+  return normaliseSupplier(response.data);
 };
+
+/** Guarantees the optional string fields are strings, and that `name` is present. */
+export const normaliseSupplier = (raw: Partial<Supplier> & { id: number }): Supplier => ({
+  id: raw.id,
+  name: raw.name ?? "",
+  email: raw.email ?? "",
+  phone: raw.phone ?? "",
+  address: raw.address ?? "",
+  contactInfo: raw.contactInfo ?? "",
+});
 
 // UPDATE supplier - returns updated supplier data
 export const updateSupplier = async (id: number, data: UpdateSupplierDto): Promise<Supplier> => {

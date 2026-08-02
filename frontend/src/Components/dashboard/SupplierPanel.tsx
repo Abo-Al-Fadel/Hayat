@@ -13,19 +13,56 @@ interface SupplierPanelProps {
   onDeleteSupplier: (id: number) => Promise<void>;
 }
 
-// Validation helpers
-const isValidEmail = (email: string): boolean => {
-  if (!email.trim()) return true; // Empty is valid (optional field)
+// Validation helpers. Tolerate undefined: a supplier object arriving without a field
+// should show a validation message, never throw inside a render.
+const isValidEmail = (email?: string): boolean => {
+  if (!email?.trim()) return true; // Empty is valid (optional field)
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
 
-const isValidPhone = (phone: string): boolean => {
-  if (!phone.trim()) return true; // Empty is valid (optional field)
+const isValidPhone = (phone?: string): boolean => {
+  if (!phone?.trim()) return true; // Empty is valid (optional field)
   // Phone can contain digits, spaces, hyphens, plus sign, and parentheses
   const phoneRegex = /^[\d\s\-+()]+$/;
   return phoneRegex.test(phone) && phone.replace(/[\s\-+()]/g, "").length >= 7;
 };
+
+interface SupplierFieldErrors {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+/**
+ * Shared by the add and edit forms so both reject the same things and word it the
+ * same way. The add form previously only greyed out its button when the name was
+ * blank, which said nothing about a malformed email or phone number - the request
+ * went to the server and the 400 came back invisibly.
+ */
+function validateSupplierFields(fields: {
+  name?: string;
+  email?: string;
+  phone?: string;
+}): SupplierFieldErrors {
+  const errors: SupplierFieldErrors = {};
+
+  if (!fields.name?.trim()) {
+    errors.name = "Supplier name is required.";
+  } else if (fields.name.trim().length < 2) {
+    errors.name = "Supplier name must be at least 2 characters.";
+  }
+
+  if (!isValidEmail(fields.email)) {
+    errors.email = "Enter a valid email address, e.g. name@supplier.com.";
+  }
+
+  if (!isValidPhone(fields.phone)) {
+    errors.phone = "Enter a valid phone number - at least 7 digits.";
+  }
+
+  return errors;
+}
 
 /**
  * SupplierPanel - Manages supplier list
@@ -58,6 +95,7 @@ export function SupplierPanel({
     contactInfo: "",
   });
   const [saving, setSaving] = useState(false);
+  const [addErrors, setAddErrors] = useState<SupplierFieldErrors>({});
 
   // Edit modal state
   const [editTarget, setEditTarget] = useState<Supplier | null>(null);
@@ -72,10 +110,12 @@ export function SupplierPanel({
   // Filter suppliers based on search
   const filteredSuppliers = useMemo(() => {
     if (!searchTerm.trim()) return suppliers;
-    
+
     const term = searchTerm.toLowerCase();
     return suppliers.filter((supplier) => {
-      const nameMatch = supplier.name.toLowerCase().includes(term);
+      // Optional chaining throughout: searching must not be able to throw on a
+      // supplier that arrived without a name.
+      const nameMatch = supplier.name?.toLowerCase().includes(term);
       const emailMatch = supplier.email?.toLowerCase().includes(term);
       const phoneMatch = supplier.phone?.toLowerCase().includes(term);
       const contactMatch = supplier.contactInfo?.toLowerCase().includes(term);
@@ -85,14 +125,25 @@ export function SupplierPanel({
 
   // Handle add supplier
   const handleAdd = useCallback(async () => {
-    if (!newSupplier.name.trim()) return;
+    const errors = validateSupplierFields(newSupplier);
+    setAddErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     setSaving(true);
     try {
-      await onAddSupplier(newSupplier);
-      
+      await onAddSupplier({
+        ...newSupplier,
+        name: newSupplier.name.trim(),
+        // `|| undefined` so a blank optional field is omitted rather than sent as "",
+        // matching the edit form. The server tolerates either now, but an empty string
+        // is not what "no email" means.
+        email: newSupplier.email?.trim() || undefined,
+        phone: newSupplier.phone?.trim() || undefined,
+      });
+
       // Reset form
       setShowAddForm(false);
+      setAddErrors({});
       setNewSupplier({
         name: "",
         email: "",
@@ -100,6 +151,15 @@ export function SupplierPanel({
         address: "",
         contactInfo: "",
       });
+    } catch (err) {
+      // A server-side rejection must not vanish. The add form used to swallow it,
+      // leaving the dialog open with no indication anything had gone wrong.
+      const message =
+        (err as { response?: { data?: { title?: string; message?: string } } })?.response?.data
+          ?.message ??
+        (err as { response?: { data?: { title?: string } } })?.response?.data?.title ??
+        "Could not add the supplier. Please try again.";
+      setAddErrors({ name: message });
     } finally {
       setSaving(false);
     }
@@ -122,9 +182,11 @@ export function SupplierPanel({
   const openEditModal = useCallback((supplier: Supplier) => {
     setEditTarget(supplier);
     setEditForm({
-      name: supplier.name,
-      email: supplier.email || "",
-      phone: supplier.phone || "",
+      // `?? ""` rather than the raw value: a supplier missing a name used to put
+      // undefined into the form, and the next .trim() took the whole page down.
+      name: supplier.name ?? "",
+      email: supplier.email ?? "",
+      phone: supplier.phone ?? "",
     });
     setEditErrors({});
   }, []);
@@ -136,22 +198,9 @@ export function SupplierPanel({
     setEditErrors({});
   }, []);
 
-  // Validate edit form
+  // Validate edit form - same rules and wording as the add form.
   const validateEditForm = useCallback((): boolean => {
-    const errors: { name?: string; email?: string; phone?: string } = {};
-    
-    if (!editForm.name.trim()) {
-      errors.name = "Name is required";
-    }
-    
-    if (editForm.email && !isValidEmail(editForm.email)) {
-      errors.email = "Invalid email format";
-    }
-    
-    if (editForm.phone && !isValidPhone(editForm.phone)) {
-      errors.phone = "Invalid phone format";
-    }
-    
+    const errors = validateSupplierFields(editForm);
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm]);
@@ -228,63 +277,117 @@ export function SupplierPanel({
           <div className={`px-5 py-4 border-b flex-shrink-0 ${
             darkMode ? "bg-gray-700/50 border-gray-700" : "bg-gray-50 border-gray-200"
           }`}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Supplier Name *"
-                value={newSupplier.name}
-                onChange={(e) => setNewSupplier((prev) => ({ ...prev, name: e.target.value }))}
-                className={`px-3 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                  darkMode 
-                    ? "bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400" 
-                    : "bg-white border-gray-300 placeholder-gray-500"
-                }`}
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newSupplier.email}
-                onChange={(e) => setNewSupplier((prev) => ({ ...prev, email: e.target.value }))}
-                className={`px-3 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                  darkMode 
-                    ? "bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400" 
-                    : "bg-white border-gray-300 placeholder-gray-500"
-                }`}
-              />
-              <input
-                type="tel"
-                placeholder="Phone"
-                value={newSupplier.phone}
-                onChange={(e) => setNewSupplier((prev) => ({ ...prev, phone: e.target.value }))}
-                className={`px-3 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                  darkMode 
-                    ? "bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400" 
-                    : "bg-white border-gray-300 placeholder-gray-500"
-                }`}
-              />
-              <input
-                type="text"
-                placeholder="Address"
-                value={newSupplier.address}
-                onChange={(e) => setNewSupplier((prev) => ({ ...prev, address: e.target.value }))}
-                className={`px-3 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
-                  darkMode 
-                    ? "bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400" 
-                    : "bg-white border-gray-300 placeholder-gray-500"
-                }`}
-              />
-            </div>
+            {(() => {
+              // Shared field styling so a field in error is obvious, not just annotated.
+              const fieldClass = (hasError: boolean) =>
+                `px-3 py-2 rounded-lg border focus:ring-2 focus:outline-none ${
+                  hasError
+                    ? "border-red-500 focus:ring-red-500"
+                    : "focus:ring-purple-500 " + (darkMode ? "border-gray-600" : "border-gray-300")
+                } ${
+                  darkMode
+                    ? "bg-gray-800 text-gray-100 placeholder-gray-400"
+                    : "bg-white placeholder-gray-500"
+                }`;
+
+              const clearError = (field: keyof SupplierFieldErrors) =>
+                setAddErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      placeholder="Supplier Name *"
+                      aria-label="Supplier name"
+                      aria-invalid={Boolean(addErrors.name)}
+                      value={newSupplier.name}
+                      onChange={(e) => {
+                        setNewSupplier((prev) => ({ ...prev, name: e.target.value }));
+                        clearError("name");
+                      }}
+                      className={fieldClass(Boolean(addErrors.name))}
+                    />
+                    {addErrors.name && (
+                      <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {addErrors.name}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      aria-label="Supplier email"
+                      aria-invalid={Boolean(addErrors.email)}
+                      value={newSupplier.email}
+                      onChange={(e) => {
+                        setNewSupplier((prev) => ({ ...prev, email: e.target.value }));
+                        clearError("email");
+                      }}
+                      className={fieldClass(Boolean(addErrors.email))}
+                    />
+                    {addErrors.email && (
+                      <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {addErrors.email}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <input
+                      type="tel"
+                      placeholder="Phone"
+                      aria-label="Supplier phone"
+                      aria-invalid={Boolean(addErrors.phone)}
+                      value={newSupplier.phone}
+                      onChange={(e) => {
+                        setNewSupplier((prev) => ({ ...prev, phone: e.target.value }));
+                        clearError("phone");
+                      }}
+                      className={fieldClass(Boolean(addErrors.phone))}
+                    />
+                    {addErrors.phone && (
+                      <div className="mt-1 flex items-center gap-1 text-sm text-red-500">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {addErrors.phone}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col">
+                    <input
+                      type="text"
+                      placeholder="Address"
+                      aria-label="Supplier address"
+                      value={newSupplier.address}
+                      onChange={(e) => setNewSupplier((prev) => ({ ...prev, address: e.target.value }))}
+                      className={fieldClass(false)}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
             <div className="flex gap-2 mt-3">
               <button
                 onClick={handleAdd}
-                disabled={saving || !newSupplier.name.trim()}
+                // Deliberately not disabled on an empty name: a dead button explains
+                // nothing. Clicking runs validation and says what is wrong.
+                disabled={saving}
                 className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
               >
-                {saving ? "Adding..." : "Add Supplier"}
+                {/* "Save Supplier", not "Add Supplier": the button that opens this
+                    form already says Add, and two controls with the same name are
+                    ambiguous to anyone navigating by label. */}
+                {saving ? "Saving..." : "Save Supplier"}
               </button>
               <button
                 onClick={() => {
                   setShowAddForm(false);
+                  setAddErrors({});
                   setNewSupplier({
                     name: "",
                     email: "",
@@ -376,6 +479,9 @@ export function SupplierPanel({
                             : "text-blue-500 hover:bg-blue-100"
                         }`}
                         title="Edit supplier"
+                        // Names the row: an icon-only button otherwise reads as
+                        // "button" to a screen reader, whichever supplier it belongs to.
+                        aria-label={`Edit ${supplier.name || "supplier"}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -389,6 +495,7 @@ export function SupplierPanel({
                             : "text-red-500 hover:bg-red-100"
                         }`}
                         title="Delete supplier"
+                        aria-label={`Delete ${supplier.name || "supplier"}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -428,7 +535,7 @@ export function SupplierPanel({
             <div className="px-5 py-4 space-y-4">
               {/* Name Field */}
               <div>
-                <label className={`block text-sm font-medium mb-1.5 ${
+                <label htmlFor="edit-supplier-name" className={`block text-sm font-medium mb-1.5 ${
                   darkMode ? "text-gray-300" : "text-gray-700"
                 }`}>
                   Name <span className="text-red-500">*</span>
@@ -449,6 +556,7 @@ export function SupplierPanel({
                       ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
                       : "bg-white text-gray-900 placeholder-gray-500"
                   }`}
+                  id="edit-supplier-name"
                   placeholder="Enter supplier name"
                 />
                 {editErrors.name && (
@@ -461,7 +569,7 @@ export function SupplierPanel({
 
               {/* Email Field */}
               <div>
-                <label className={`block text-sm font-medium mb-1.5 ${
+                <label htmlFor="edit-supplier-email" className={`block text-sm font-medium mb-1.5 ${
                   darkMode ? "text-gray-300" : "text-gray-700"
                 }`}>
                   Email
@@ -482,6 +590,7 @@ export function SupplierPanel({
                       ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
                       : "bg-white text-gray-900 placeholder-gray-500"
                   }`}
+                  id="edit-supplier-email"
                   placeholder="Enter email address"
                 />
                 {editErrors.email && (
@@ -494,7 +603,7 @@ export function SupplierPanel({
 
               {/* Phone Field */}
               <div>
-                <label className={`block text-sm font-medium mb-1.5 ${
+                <label htmlFor="edit-supplier-phone" className={`block text-sm font-medium mb-1.5 ${
                   darkMode ? "text-gray-300" : "text-gray-700"
                 }`}>
                   Phone
@@ -515,6 +624,7 @@ export function SupplierPanel({
                       ? "bg-gray-700 text-gray-100 placeholder-gray-400" 
                       : "bg-white text-gray-900 placeholder-gray-500"
                   }`}
+                  id="edit-supplier-phone"
                   placeholder="Enter phone number"
                 />
                 {editErrors.phone && (
@@ -543,7 +653,9 @@ export function SupplierPanel({
               </button>
               <button
                 onClick={handleEditSave}
-                disabled={editSaving || !editForm.name.trim()}
+                // As with the add form: let the click explain the problem rather
+                // than presenting a button that does nothing for unstated reasons.
+                disabled={editSaving}
                 className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
               >
                 {editSaving ? (

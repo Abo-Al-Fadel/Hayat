@@ -17,8 +17,10 @@ public class SupplierController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(CreateSupplierDto dto)
     {
-        var id = await _service.CreateAsync(dto);
-        return Ok(new { id });
+        // Responds with the whole supplier: the client adds it straight to its list,
+        // and a response of { id } alone left every other field undefined there.
+        var created = await _service.CreateAsync(dto);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
     [HttpPut("{id}")]

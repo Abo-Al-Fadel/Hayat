@@ -1381,7 +1381,7 @@ const PharmacistDashboard: React.FC = () => {
       {ordersModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setOrdersModalOpen(false)} />
-          <div className={`relative max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+          <div className={`relative max-w-6xl w-full max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">Orders &amp; invoices</h3>
               <div className="flex items-center gap-2">
@@ -1389,20 +1389,23 @@ const PharmacistDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Calendar picks the day, the list narrows to it, the pane shows the invoice. */}
-            <div className="mb-4">
-              <OrderCalendar
-                items={orderCalendarItems}
-                value={ordersDateRange}
-                onChange={setOrdersDateRange}
-                darkMode={darkMode}
-                noun="orders"
-                selectedCount={visibleOrders.length}
-              />
-            </div>
+            {/* Calendar, order list and invoice sit side by side from lg up, matching the
+                admin panel: pick a day on the left, the list narrows in the middle, the
+                invoice opens on the right without anything scrolling out of view.
+                Below lg they stack, which is the only thing that fits a phone. */}
+            <div className="grid grid-cols-1 lg:grid-cols-[19rem_15rem_minmax(0,1fr)] gap-4 items-start">
+              <div className="lg:sticky lg:top-0">
+                <OrderCalendar
+                  items={orderCalendarItems}
+                  value={ordersDateRange}
+                  onChange={setOrdersDateRange}
+                  darkMode={darkMode}
+                  noun="orders"
+                  selectedCount={visibleOrders.length}
+                />
+              </div>
 
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="w-full sm:w-1/3 sm:border-r sm:pr-3">
+              <div className="lg:border-r lg:pr-3 border-gray-200 dark:border-gray-700">
                 {ordersLoading ? (
                   <div className="text-sm text-gray-400">Loading orders…</div>
                 ) : visibleOrders.length === 0 ? (
@@ -1443,7 +1446,7 @@ const PharmacistDashboard: React.FC = () => {
               </div>
 
               {/* Was a bare w-2/3, which stayed two-thirds wide on a phone. */}
-              <div className="w-full sm:w-2/3 sm:pl-4">
+              <div className="min-w-0">
                 {selectedOrder ? (
                   <div>
                     <div className="flex justify-between items-start">
