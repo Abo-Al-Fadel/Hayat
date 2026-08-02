@@ -229,6 +229,27 @@ test.describe("HR in the browser", () => {
     await expect(page.getByRole("button", { name: /^add (product|medicine)/i })).toHaveCount(0);
     await expect(page.getByTitle("Delete product")).toHaveCount(0);
     await expect(page.getByTitle(/^(Hide|Show) product$/)).toHaveCount(0);
+    await expect(page.getByTitle("Edit name")).toHaveCount(0);
+  });
+
+  test("no product field can be typed into", async ({ page }) => {
+    // Hiding the delete button is not enough: an editable price box or a stock
+    // stepper is a control too, and using one only earns a 403 from the server.
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await page.waitForTimeout(1500);
+
+    const main = page.locator("main");
+    await expect(main.locator("input[type=number]")).toHaveCount(0);
+    await expect(main.locator("input[type=file]")).toHaveCount(0);
+    await expect(main.locator("select")).toHaveCount(0);
+  });
+
+  test("the prices and stock levels are still shown", async ({ page }) => {
+    // Read-only must not mean blank: the figures are the reason to open the page.
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await page.waitForTimeout(1500);
+
+    await expect(page.getByText(/^\$\d+\.\d{2}$/).first()).toBeVisible();
   });
 
   test("the users page offers nothing that writes", async ({ page }) => {
@@ -246,6 +267,10 @@ test.describe("HR in the browser", () => {
 
     await expect(page.getByRole("button", { name: "New Order" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /add supplier/i })).toHaveCount(0);
+    await expect(page.getByTitle("Edit supply stock")).toHaveCount(0);
+    await expect(page.getByTitle("Delete order permanently")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Edit .+/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Delete .+/ })).toHaveCount(0);
   });
 
   test("but the data itself is all visible", async ({ page }) => {

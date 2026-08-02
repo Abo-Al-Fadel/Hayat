@@ -145,16 +145,18 @@ export function ProductCard({
         ) : (
           <div className="text-xs text-gray-400">No image</div>
         )}
-        <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 text-white">
-          <Upload className="h-6 w-6 mb-1" />
-          <span className="text-xs">Change</span>
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </label>
+        {!readOnly && (
+          <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 text-white">
+            <Upload className="h-6 w-6 mb-1" />
+            <span className="text-xs">Change</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </label>
+        )}
       </div>
 
       {/* Name & ID & Category */}
@@ -202,7 +204,7 @@ export function ProductCard({
                 </span>
               )}
             </div>
-            {onNameChange && (
+            {onNameChange && !readOnly && (
               <button
                 onClick={handleStartEditName}
                 className="p-1 rounded opacity-0 group-hover/name:opacity-100 transition-opacity bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400"
@@ -214,7 +216,11 @@ export function ProductCard({
           </div>
         )}
         <div className="text-sm text-gray-500 dark:text-gray-400">ID: {product.id}</div>
-        {onCategoryChange && (
+        {readOnly ? (
+          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {categories.find((c) => c.id === product.categoryId)?.name ?? "Uncategorized"}
+          </div>
+        ) : onCategoryChange && (
           <select
             value={product.categoryId ?? ""}
             onChange={(e) => onCategoryChange(product.id, e.target.value ? parseInt(e.target.value, 10) : null)}
@@ -231,17 +237,21 @@ export function ProductCard({
       {/* Price */}
       <div className="w-48 flex flex-col items-center">
         <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Price</label>
-        <div className="flex items-center">
-          <span className="mr-1">$</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={Number(product.price).toFixed(2)}
-            onChange={(e) => onPriceChange(product.id, e.target.value)}
-            className="w-28 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-          />
-        </div>
+        {readOnly ? (
+          <div className="font-medium">${Number(product.price).toFixed(2)}</div>
+        ) : (
+          <div className="flex items-center">
+            <span className="mr-1">$</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={Number(product.price).toFixed(2)}
+              onChange={(e) => onPriceChange(product.id, e.target.value)}
+              className="w-28 text-center rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+            />
+          </div>
+        )}
       </div>
 
       {/* Stock */}
@@ -254,6 +264,9 @@ export function ProductCard({
           {isLowStock && <AlertTriangle className="h-3 w-3" />}
           Stock {isLowStock && "(Low!)"}
         </label>
+        {readOnly ? (
+          <div className="font-medium">{product.stock}</div>
+        ) : (
         <div className="flex items-center gap-2">
           <button
             onClick={() => onStockIncrement(product.id, -1)}
@@ -279,6 +292,7 @@ export function ProductCard({
             <Plus className="h-4 w-4" />
           </button>
         </div>
+        )}
         {/* Low Stock Badge */}
         {isLowStock && (
           <span className="mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">

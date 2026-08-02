@@ -767,6 +767,10 @@ export function SupplyStockPanel({
     const isLoading = actionLoading === stock.id;
     const status = stock.status;
 
+    // A read-only observer gets no row actions at all - edit, the status steps,
+    // cancel and delete every one of them changes an order.
+    if (readOnly) return null;
+
     return (
       <div className="flex items-center gap-2">
         {/* Edit button (only when Created) */}
