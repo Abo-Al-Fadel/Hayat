@@ -35,6 +35,22 @@ public class PricingSettings
     /// Rounds suggested prices to this many decimal places.
     /// </summary>
     public int RoundToDecimals { get; set; } = 2;
+
+    /// <summary>
+    /// Bulk purchase discounts. Suppliers price per-unit lower as order size grows, so
+    /// the suggested purchase price drops through these bands. Ordered by ascending
+    /// MinQuantity; the highest band whose threshold is met wins.
+    /// </summary>
+    public List<VolumeDiscountTier> VolumeDiscountTiers { get; set; } = new();
+}
+
+public class VolumeDiscountTier
+{
+    /// <summary>Inclusive minimum order quantity for this discount.</summary>
+    public int MinQuantity { get; set; }
+
+    /// <summary>Percentage off the base unit purchase price.</summary>
+    public decimal DiscountPercent { get; set; }
 }
 
 public class MarkupTier

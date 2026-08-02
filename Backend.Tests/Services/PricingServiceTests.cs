@@ -22,9 +22,122 @@ public class PricingServiceTests
             },
             DefaultMarkupPercent = 10m,
             DispensingFee = dispensingFee,
-            RoundToDecimals = 2
+            RoundToDecimals = 2,
+            VolumeDiscountTiers = new List<VolumeDiscountTier>
+            {
+                new() { MinQuantity = 50, DiscountPercent = 3m },
+                new() { MinQuantity = 200, DiscountPercent = 6m },
+                new() { MinQuantity = 500, DiscountPercent = 9m },
+                new() { MinQuantity = 1000, DiscountPercent = 12m },
+            }
         };
         return new PricingService(Options.Create(settings));
+    }
+
+    // ── Purchase price (the supplier side) ───────────────────────────────────
+
+    [Fact]
+    public void SuggestPurchasePrice_IsAlwaysBelowTheSellPrice()
+    {
+        var service = CreateService();
+        foreach (var sell in new[] { 4m, 12m, 50m, 100m, 250m, 1000m })
+        {
+            var buy = service.SuggestPurchasePrice(sell);
+            Assert.True(buy < sell, $"buy {buy} should be below sell {sell}");
+            Assert.True(buy > 0, $"buy {buy} should be positive");
+        }
+    }
+
+    [Fact]
+    public void SuggestPurchasePrice_InvertsSuggestSellPrice()
+    {
+        var service = CreateService();
+        // Round-trip: a cost marked up to retail must come back to the same cost.
+        foreach (var cost in new[] { 4.00m, 25.00m, 80.00m, 500.00m })
+        {
+            var sell = service.SuggestSellPrice(cost);
+            Assert.Equal(cost, service.SuggestPurchasePrice(sell));
+        }
+    }
+
+    [Fact]
+    public void SuggestPurchasePrice_PicksTheSelfConsistentBand()
+    {
+        var service = CreateService();
+        // Selling at 50 implies the 25% band: 40 x 1.25 = 50.
+        Assert.Equal(40.00m, service.SuggestPurchasePrice(50m));
+        // Selling at 100 implies the 15% band: 86.96 x 1.15 ~= 100.
+        Assert.Equal(86.96m, service.SuggestPurchasePrice(100m));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    public void SuggestPurchasePrice_ReturnsZero_ForNonPositiveSellPrice(decimal sell)
+    {
+        Assert.Equal(0m, CreateService().SuggestPurchasePrice(sell));
+    }
+
+    // ── Volume discounts ─────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(49, 0)]
+    [InlineData(50, 3)]
+    [InlineData(199, 3)]
+    [InlineData(200, 6)]
+    [InlineData(499, 6)]
+    [InlineData(500, 9)]
+    [InlineData(999, 9)]
+    [InlineData(1000, 12)]
+    [InlineData(50000, 12)]
+    public void GetVolumeDiscountPercent_UsesTheHighestBandReached(int quantity, decimal expected)
+    {
+        Assert.Equal(expected, CreateService().GetVolumeDiscountPercent(quantity));
+    }
+
+    [Fact]
+    public void SuggestPurchasePrice_GetsCheaperPerUnitAsTheOrderGrows()
+    {
+        var service = CreateService();
+        const decimal sell = 50m;
+
+        var small = service.SuggestPurchasePrice(sell, 10);
+        var medium = service.SuggestPurchasePrice(sell, 100);
+        var large = service.SuggestPurchasePrice(sell, 300);
+        var bulk = service.SuggestPurchasePrice(sell, 1200);
+
+        Assert.True(medium < small, "100 units should beat 10");
+        Assert.True(large < medium, "300 units should beat 100");
+        Assert.True(bulk < large, "1200 units should beat 300");
+
+        // Base is 40.00; 3% / 6% / 12% off.
+        Assert.Equal(40.00m, small);
+        Assert.Equal(38.80m, medium);
+        Assert.Equal(37.60m, large);
+        Assert.Equal(35.20m, bulk);
+    }
+
+    [Fact]
+    public void SuggestPurchasePrice_StaysBelowSellPrice_EvenAtTheLargestDiscount()
+    {
+        var service = CreateService();
+        foreach (var sell in new[] { 4m, 50m, 250m, 1000m })
+        {
+            Assert.True(service.SuggestPurchasePrice(sell, 100000) < sell);
+        }
+    }
+
+    [Fact]
+    public void SuggestPurchasePrice_MarginImprovesWithVolume()
+    {
+        var service = CreateService();
+        var singleMargin = service.CalculateMarginPercent(service.SuggestPurchasePrice(50m, 1), 50m);
+        var bulkMargin = service.CalculateMarginPercent(service.SuggestPurchasePrice(50m, 1000), 50m);
+
+        Assert.NotNull(singleMargin);
+        Assert.NotNull(bulkMargin);
+        Assert.True(bulkMargin > singleMargin, "buying in bulk should widen the margin");
     }
 
     // ── Tier selection ───────────────────────────────────────────────────────

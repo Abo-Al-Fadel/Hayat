@@ -24,6 +24,21 @@ public interface IPricingService
     decimal? CalculateMarginPercent(decimal unitCost, decimal sellPrice);
 
     /// <summary>
+    /// Works backwards from a retail price to the purchase price implied by the markup
+    /// tiers, i.e. the inverse of <see cref="SuggestSellPrice"/>.
+    /// </summary>
+    decimal SuggestPurchasePrice(decimal sellPrice);
+
+    /// <summary>Bulk discount percentage that applies to an order of this size.</summary>
+    decimal GetVolumeDiscountPercent(int quantity);
+
+    /// <summary>
+    /// Suggested unit purchase price for buying <paramref name="quantity"/> units of an
+    /// item that retails at <paramref name="sellPrice"/>, after the bulk discount.
+    /// </summary>
+    decimal SuggestPurchasePrice(decimal sellPrice, int quantity);
+
+    /// <summary>
     /// Recalculated weighted-average cost after receiving new stock.
     /// </summary>
     decimal WeightedAverageCost(int existingQuantity, decimal existingCost, int incomingQuantity, decimal incomingCost);

@@ -49,6 +49,10 @@ import {
 import type { Supplier } from "../../Services/SupplierService";
 import type { MedicineDisplay } from "../../Services/MedicineService";
 import toast from "react-hot-toast";
+import {
+  suggestPurchasePrice,
+  type PurchasePriceSuggestion,
+} from "../../Services/StatsService";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -165,8 +169,35 @@ export function SupplyStockPanel({
   const [showMedicineDropdown, setShowMedicineDropdown] = useState(false);
   const [selectedMedicineId, setSelectedMedicineId] = useState<number | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
-  // Purchase price for new item being added (defaults to medicine selling price as estimate)
+  // Purchase price for the item being added. Left at 0 until the admin types a value,
+  // in which case the suggested supplier price is used instead.
   const [selectedPurchasePrice, setSelectedPurchasePrice] = useState<number>(0);
+  const [suggestion, setSuggestion] = useState<PurchasePriceSuggestion | null>(null);
+
+  // Ask the server what this should cost from a supplier, for this order size.
+  // Debounced because quantity is a free-text number input.
+  useEffect(() => {
+    const medicine = medicines.find((m) => m.id === selectedMedicineId);
+    if (!medicine || selectedQuantity < 1) {
+      setSuggestion(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await suggestPurchasePrice(medicine.price, selectedQuantity);
+        if (!cancelled) setSuggestion(result);
+      } catch {
+        if (!cancelled) setSuggestion(null);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [selectedMedicineId, selectedQuantity, medicines]);
 
   // Action loading state
   const [actionLoading, setActionLoading] = useState<number | null>(null);
@@ -323,10 +354,13 @@ export function SupplyStockPanel({
    * Add medicine to form items
    * 
    * PRICING LOGIC:
-   * - purchasePrice: Defaults to sellingPrice but is EDITABLE by admin
-   * - sellingPrice: Read from medicine data, shown for reference only
-   * 
-   * Admin can adjust purchasePrice based on supplier quote
+   * - purchasePrice: defaults to the SUGGESTED SUPPLIER PRICE, still editable
+   * - sellingPrice: read from medicine data, shown for reference only
+   *
+   * The suggestion works backwards through the markup tiers and applies the bulk
+   * discount for the order size, so it is always below the retail price and falls as
+   * the quantity rises. It previously defaulted to the SELLING price, which meant every
+   * restock was recorded at zero margin.
    */
   const handleAddMedicine = useCallback(() => {
     if (!selectedMedicineId || selectedQuantity <= 0) return;
@@ -340,8 +374,12 @@ export function SupplyStockPanel({
       return;
     }
 
-    // Purchase price: use entered value or default to medicine selling price
-    const purchasePrice = selectedPurchasePrice > 0 ? selectedPurchasePrice : medicine.price;
+    // Use the admin's entered price when given, otherwise the suggested supplier price
+    // for this quantity. Never fall back to the selling price - that implies no margin.
+    const purchasePrice =
+      selectedPurchasePrice > 0
+        ? selectedPurchasePrice
+        : suggestion?.suggestedUnitPrice ?? medicine.price;
 
     // Add item with all required fields including unitPrice
     setFormItems((prev) => [
@@ -363,7 +401,7 @@ export function SupplyStockPanel({
     setSelectedPurchasePrice(0);
     setMedicineSearch("");
     setShowMedicineDropdown(false);
-  }, [selectedMedicineId, selectedQuantity, selectedPurchasePrice, medicines, formItems]);
+  }, [selectedMedicineId, selectedQuantity, selectedPurchasePrice, medicines, formItems, suggestion?.suggestedUnitPrice]);
 
   /**
    * Change the medicine for an existing item
@@ -910,13 +948,34 @@ export function SupplyStockPanel({
                   step="0.01"
                   value={selectedPurchasePrice || ""}
                   onChange={(e) => setSelectedPurchasePrice(parseFloat(e.target.value) || 0)}
-                  placeholder="Price"
+                  placeholder={suggestion ? suggestion.suggestedUnitPrice.toFixed(2) : "Price"}
                   className={`w-24 px-2 py-2 rounded-lg border focus:ring-2 focus:ring-purple-500 ${
                     darkMode 
                       ? "bg-gray-800 border-gray-600 text-gray-100" 
                       : "bg-white border-gray-300"
                   }`}
                 />
+                {suggestion && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPurchasePrice(suggestion.suggestedUnitPrice)}
+                    title={
+                      `Sells for $${suggestion.sellPrice.toFixed(2)}. ` +
+                      `Suggested supplier price $${suggestion.basePurchasePrice.toFixed(2)}` +
+                      (suggestion.volumeDiscountPercent > 0
+                        ? `, less ${suggestion.volumeDiscountPercent}% bulk discount at ${suggestion.quantity} units ` +
+                          `= $${suggestion.suggestedUnitPrice.toFixed(2)} (saves $${suggestion.savingsVsBase.toFixed(2)}).`
+                        : ".") +
+                      " Click to use."
+                    }
+                    className="text-[10px] mt-0.5 text-purple-500 hover:text-purple-400 text-left leading-tight"
+                  >
+                    use ${suggestion.suggestedUnitPrice.toFixed(2)}
+                    {suggestion.volumeDiscountPercent > 0 && (
+                      <span className="text-emerald-500"> −{suggestion.volumeDiscountPercent}%</span>
+                    )}
+                  </button>
+                )}
               </div>
 
               {/* Quantity Input */}

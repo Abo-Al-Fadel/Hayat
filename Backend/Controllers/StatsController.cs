@@ -58,4 +58,38 @@ public class StatsController : ControllerBase
             marginPercent = _pricing.CalculateMarginPercent(cost, suggested)
         });
     }
+
+    /// <summary>
+    /// Suggested purchase (supplier) price for an item that retails at
+    /// <paramref name="sellPrice"/>, for an order of <paramref name="quantity"/> units.
+    ///
+    /// Works backwards through the markup tiers, then applies the bulk discount, so the
+    /// buy price is always below the sell price and falls as the order grows. The supply
+    /// order form previously defaulted the purchase price to the retail price, which
+    /// implied a zero margin on every restock.
+    /// </summary>
+    [HttpGet("suggest-purchase-price")]
+    public IActionResult SuggestPurchasePrice([FromQuery] decimal sellPrice, [FromQuery] int quantity = 1)
+    {
+        if (sellPrice < 0)
+            return BadRequest(new { error = "Sell price cannot be negative." });
+        if (quantity < 1)
+            return BadRequest(new { error = "Quantity must be at least 1." });
+
+        var basePrice = _pricing.SuggestPurchasePrice(sellPrice);
+        var discountPercent = _pricing.GetVolumeDiscountPercent(quantity);
+        var unitPrice = _pricing.SuggestPurchasePrice(sellPrice, quantity);
+
+        return Ok(new
+        {
+            sellPrice,
+            quantity,
+            basePurchasePrice = basePrice,
+            volumeDiscountPercent = discountPercent,
+            suggestedUnitPrice = unitPrice,
+            totalCost = Math.Round(unitPrice * quantity, 2, MidpointRounding.AwayFromZero),
+            savingsVsBase = Math.Round((basePrice - unitPrice) * quantity, 2, MidpointRounding.AwayFromZero),
+            marginPercent = _pricing.CalculateMarginPercent(unitPrice, sellPrice)
+        });
+    }
 }

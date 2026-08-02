@@ -66,6 +66,33 @@ export const suggestPrice = async (cost: number): Promise<PriceSuggestion> => {
   return response.data;
 };
 
+export interface PurchasePriceSuggestion {
+  sellPrice: number;
+  quantity: number;
+  /** Price before any bulk discount. */
+  basePurchasePrice: number;
+  volumeDiscountPercent: number;
+  suggestedUnitPrice: number;
+  totalCost: number;
+  savingsVsBase: number;
+  marginPercent: number | null;
+}
+
+/**
+ * Suggested supplier price for restocking. Derived by working backwards through the
+ * markup tiers, then applying the bulk discount for the order size - so it is always
+ * below the retail price and drops as the quantity rises.
+ */
+export const suggestPurchasePrice = async (
+  sellPrice: number,
+  quantity: number
+): Promise<PurchasePriceSuggestion> => {
+  const response = await api.get(
+    `/api/Stats/suggest-purchase-price?sellPrice=${sellPrice}&quantity=${quantity}`
+  );
+  return response.data;
+};
+
 export const formatCurrency = (value: number | null | undefined): string =>
   value === null || value === undefined
     ? "—"
