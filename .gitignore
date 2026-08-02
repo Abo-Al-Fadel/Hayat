@@ -29,10 +29,13 @@ secrets.json
 # Testing
 # ========================
 coverage/
-frontend/playwright-report/
-frontend/test-results/
-frontend/blob-report/
-frontend/.playwright/
+# Unanchored: Playwright writes these relative to wherever it was invoked from.
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+# A frontend build made against a throwaway API, for E2E runs.
+frontend/build-e2e/
 
 # ========================
 # Vite
