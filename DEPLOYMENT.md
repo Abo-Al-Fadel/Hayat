@@ -44,8 +44,34 @@ Keep this somewhere safe. It is the only thing standing between a stranger and a
 3. Create a new server. Note the **server name**, **admin login** and **admin password** — the password is not shown again.
 4. On the **Compute + storage** step choose **Apply free offer**. It must read *General Purpose — Serverless*, 32 GB. If you do not select this, the database is billable.
 5. Set **Backup storage redundancy** to *Locally redundant* — the cheapest, and enough here.
-6. Create the database, then open it → **Networking** → tick **Allow Azure services and resources to access this server**, and add your own IP so you can connect from your machine.
+6. Set the firewall — see [Letting Render reach the database](#letting-render-reach-the-database) below. It can be done during creation or afterwards.
 7. Open **Connection strings → ADO.NET** and copy it. Replace `{your_password}` with the real password.
+
+### Letting Render reach the database
+
+Azure SQL rejects every connection by default; callers must be allowlisted by IP. On the
+**SQL server** (not the database) → **Security → Networking → Public access**:
+
+- **Public network access:** `Selected networks`
+- **Firewall rules:** add your own machine with **+ Add your client IPv4 address**, so you
+  can connect from SSMS or Azure Data Studio.
+
+> **"Allow Azure services and resources to access this server" does not cover Render.**
+> That exception admits traffic originating inside *Azure*. Render runs on its own
+> infrastructure, so it is not covered — leave the box unticked, it only widens the
+> firewall for no benefit here.
+
+For Render itself, pick one:
+
+| | How | Trade-off |
+|---|---|---|
+| **Allowlist Render's outbound IPs** | Render dashboard → your service → **Connect → Outbound**. Add each address as a firewall rule. | Tightest. Render's shared outbound addresses can change, and when they do the API stops reaching the database until you update the rules. |
+| **Allow any address** | One rule, `0.0.0.0` to `255.255.255.255` | Never breaks. The database is then reachable from anywhere, defended by the SQL password and TLS alone — so that password must be long and random. |
+
+Static outbound IPs are a paid Render add-on; free services draw from a shared pool, which
+is why the first option carries a maintenance cost. Start with the allowlist, and if the
+API suddenly cannot reach the database after working fine, re-check Render's outbound
+addresses before assuming anything else broke.
 
 You should end up with something like:
 
