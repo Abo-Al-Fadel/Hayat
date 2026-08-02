@@ -2,6 +2,7 @@ using Hayat.Backend.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 public class PharmacyDbContext : IdentityDbContext<AppUser>
 {
@@ -17,6 +18,43 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<PaymentMethod> PaymentMethods { get; set; }
     public DbSet<MedicineImage> MedicineImages { get; set; }
+
+    /// <summary>
+    /// SQL Server's datetime2 stores no time zone, so EF materialises every timestamp
+    /// with DateTimeKind.Unspecified. System.Text.Json then serialises it without a "Z",
+    /// and the browser's Date parser reads an unqualified string as *local* time.
+    ///
+    /// Every timestamp written here is DateTime.UtcNow, so that silently shifted each
+    /// one by the client's offset. In UTC+3 an order placed at 00:24 local came back as
+    /// 21:24 the previous day - wrong time, and on the calendar, wrong day. It only
+    /// showed between midnight and 03:00, which is why it survived so long.
+    ///
+    /// Stamping the Kind on read costs nothing and makes the wire format unambiguous.
+    /// It changes no stored value and needs no migration.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder builder)
+    {
+        base.ConfigureConventions(builder);
+
+        // Conventions take the converter's type, not an instance.
+        builder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        builder.Properties<DateTime?>().HaveConversion<NullableUtcDateTimeConverter>();
+    }
+
+    private sealed class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>
+    {
+        public UtcDateTimeConverter()
+            : base(write => write, read => DateTime.SpecifyKind(read, DateTimeKind.Utc)) { }
+    }
+
+    private sealed class NullableUtcDateTimeConverter : ValueConverter<DateTime?, DateTime?>
+    {
+        public NullableUtcDateTimeConverter()
+            : base(
+                write => write,
+                read => read.HasValue ? DateTime.SpecifyKind(read.Value, DateTimeKind.Utc) : read)
+        { }
+    }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -53,7 +53,7 @@ import {
 } from "../Services/NotificationService";
 
 // Components
-import { ConfirmModal } from "../Components/ui";
+import { ConfirmModal, ReadOnlyBanner } from "../Components/ui";
 import logo from "../Images/HL.png";
 import { getValidToken } from "../utils/token";
 
@@ -96,7 +96,11 @@ interface StatusChangeConfirmation {
 export default function StorageManagerDashboard() {
   const navigate = useNavigate();
   const { darkMode, toggle: toggleDarkMode } = useDarkMode();
-  const { logout } = useAuth();
+  const { logout, canEdit } = useAuth();
+
+  // The read-only observer (HR) borrows this page. Every write below is refused by the
+  // server for that role, so we stop offering actions that can only fail.
+  const readOnly = !canEdit;
 
   // ──────────────────────────────────────────────────────────────────────────
   // State
@@ -276,6 +280,8 @@ export default function StorageManagerDashboard() {
   };
 
   const handleMarkNotificationRead = async (id: number) => {
+    // Marking read is a write; the server refuses it for the read-only role.
+    if (readOnly) return;
     try {
       await markNotificationsRead([id]);
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
@@ -286,6 +292,7 @@ export default function StorageManagerDashboard() {
   };
 
   const handleMarkAllRead = async () => {
+    if (readOnly) return;
     try {
       await markAllNotificationsRead();
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
@@ -322,9 +329,10 @@ export default function StorageManagerDashboard() {
 
   const renderStatusDropdown = (order: SupplyStock) => {
     const availableStatuses = getStorageManagerAvailableStatuses(order.status);
-    
-    // If no available status transitions, just show the badge
-    if (availableStatuses.length === 0) {
+
+    // If no available status transitions - or the viewer cannot make one - just show
+    // the badge.
+    if (readOnly || availableStatuses.length === 0) {
       return renderStatusBadge(order.status);
     }
 
@@ -483,7 +491,7 @@ export default function StorageManagerDashboard() {
                 }`}>
                   <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                     <h3 className="font-semibold">Notifications</h3>
-                    {unreadCount > 0 && (
+                    {unreadCount > 0 && !readOnly && (
                       <button
                         onClick={handleMarkAllRead}
                         className="text-xs text-purple-600 hover:text-purple-700"
@@ -537,6 +545,7 @@ export default function StorageManagerDashboard() {
 
         {/* Content Area */}
         <div className="flex-1 p-6 overflow-y-auto">
+          {readOnly && <ReadOnlyBanner darkMode={darkMode} />}
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
@@ -575,9 +584,13 @@ export default function StorageManagerDashboard() {
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
                         Status
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                        Actions
-                      </th>
+                      {/* Read-only viewers get no controls, so the column would only
+                          repeat the Status badge beside it. */}
+                      {!readOnly && (
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                          Actions
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -607,15 +620,17 @@ export default function StorageManagerDashboard() {
                           <td className="px-4 py-4 whitespace-nowrap">
                             {renderStatusBadge(order.status)}
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            {renderStatusDropdown(order)}
-                          </td>
+                          {!readOnly && (
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              {renderStatusDropdown(order)}
+                            </td>
+                          )}
                         </tr>
                         
                         {/* Expanded Item Details */}
                         {expandedOrderId === order.id && (
                           <tr>
-                            <td colSpan={6} className={`px-4 py-4 ${darkMode ? "bg-gray-750" : "bg-gray-50"}`}>
+                            <td colSpan={readOnly ? 5 : 6} className={`px-4 py-4 ${darkMode ? "bg-gray-750" : "bg-gray-50"}`}>
                               <div className="space-y-2">
                                 <h4 className="font-medium text-sm mb-2">Order Items:</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

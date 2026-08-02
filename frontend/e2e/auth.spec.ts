@@ -61,7 +61,11 @@ test.describe("Authentication", () => {
     await loginAs(page, "admin");
 
     await page.evaluate(() => localStorage.setItem("token", "tampered.jwt.value"));
-    await page.goto("/admin");
+
+    // The rejected token makes the app hard-redirect to /login, which can cancel this
+    // navigation before it finishes loading. That cancellation *is* the desired
+    // behaviour; the assertion below is what decides the test.
+    await page.goto("/admin").catch(() => {});
 
     // The UI may still mount from the cached user object, but every API call must fail,
     // so no product data can render.

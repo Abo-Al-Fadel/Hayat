@@ -8,6 +8,7 @@ import AdminDashboard from "../Pages/AdminDashboard";
 import PharmacistDashboard from "../Pages/PharmacistDashboard";
 import StorageManagerDashboard from "../Pages/StorageManagerDashboard";
 import NotFound from "../Pages/NotFound";
+import HrHome from "../Pages/HrHome";
 import ProtectedRoute from "./ProtectedRoute";
 
 export const router = createBrowserRouter([
@@ -19,13 +20,25 @@ export const router = createBrowserRouter([
       { path: "login", element: <Login /> },
       { path: "contact", element: <Contact /> },
 
+      // HR view picker. HR has no dashboard of its own - it borrows the other three,
+      // read-only - so it lands here and chooses which one to open.
+      {
+        path: "hr", // /hr
+        element: (
+          <ProtectedRoute allowedRoles={["HR"]}>
+            <HrHome />
+          </ProtectedRoute>
+        ),
+      },
+
       // Admin Dashboard
       {
         path: "admin", // /admin
         element: (
-          // HR is the read-only observer: same pages as an Admin, no controls that
-          // change anything. What actually stops it writing is server-side; see
-          // Roles in the backend and RoleAuthorizationTests.
+          // HR is the read-only observer: same pages as everyone else, no controls
+          // that change anything. What actually stops it writing is server-side; see
+          // Roles in the backend and RoleAuthorizationTests. Hiding a button is
+          // courtesy, so listing HR here costs nothing in security terms.
           <ProtectedRoute allowedRoles={["Admin", "HR"]}>
             <AdminDashboard />
           </ProtectedRoute>
@@ -36,7 +49,7 @@ export const router = createBrowserRouter([
       {
         path: "pharmacist", // /pharmacist
         element: (
-          <ProtectedRoute allowedRoles={["Pharmacist"]}>
+          <ProtectedRoute allowedRoles={["Pharmacist", "HR"]}>
             <PharmacistDashboard />
           </ProtectedRoute>
         ),
@@ -46,7 +59,7 @@ export const router = createBrowserRouter([
       {
         path: "storage", // /storage
         element: (
-          <ProtectedRoute allowedRoles={["StorageManager"]}>
+          <ProtectedRoute allowedRoles={["StorageManager", "HR"]}>
             <StorageManagerDashboard />
           </ProtectedRoute>
         ),

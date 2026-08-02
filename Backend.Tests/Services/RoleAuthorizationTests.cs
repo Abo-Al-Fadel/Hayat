@@ -109,18 +109,27 @@ public class RoleAuthorizationTests
     }
 
     [Fact]
-    public void HR_CanReadEverythingAdminCan()
+    public void HR_CanReachEveryRead()
     {
-        // The point of the role: view all pages. Any GET an Admin can reach, HR can too.
-        var adminOnly = Endpoints()
+        // The whole point of the role: view every page. So every read admits HR.
+        //
+        // This deliberately checks all reads rather than only the ones an Admin can
+        // reach. The narrower "HR sees everything Admin sees" version passed while
+        // SupplyOrder/storage-manager was guarded by CanReceiveSupply - a policy naming
+        // only StorageManager, so it named no Admin for HR to be compared against, and
+        // the rule held vacuously over an endpoint HR could not load.
+        //
+        // A read with no role list at all is reachable by any authenticated user, HR
+        // included, so it satisfies this too.
+        var closedToHr = Endpoints()
             .Where(e => IsRead(e) && !e.Anonymous)
-            .Where(e => e.Roles.Contains("Admin") && !e.Roles.Contains(HR))
-            .Select(e => e.Name)
+            .Where(e => e.Roles.Length > 0 && !e.Roles.Contains(HR))
+            .Select(e => $"{e.Name} [{string.Join(",", e.Roles)}]")
             .ToList();
 
-        Assert.True(adminOnly.Count == 0,
-            "HR should see every page an Admin sees, but these reads exclude it:\n  " +
-            string.Join("\n  ", adminOnly));
+        Assert.True(closedToHr.Count == 0,
+            "HR is the read-only observer and must be able to open every page, but " +
+            "these reads exclude it:\n  " + string.Join("\n  ", closedToHr));
     }
 
     // ── General hygiene these rules depend on ────────────────────────────────

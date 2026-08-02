@@ -70,8 +70,12 @@ public class SupplyOrderController : ControllerBase
     }
 
     // Get orders for Storage Manager (Ordered, Shipped, Received only)
+    //
+    // This is a read, so it takes a read policy. It previously carried CanReceiveSupply
+    // - a write policy - which locked out Admin and the read-only HR role from a
+    // queue they are both allowed to see.
     [HttpGet("storage-manager")]
-    [Authorize(Roles = Roles.CanReceiveSupply)]
+    [Authorize(Roles = Roles.CanReadSupply)]
     public async Task<IActionResult> GetForStorageManager()
     {
         var orders = await _service.GetOrdersForStorageManagerAsync();

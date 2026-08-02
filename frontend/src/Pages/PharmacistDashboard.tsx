@@ -23,6 +23,7 @@ import toast, { Toaster } from "react-hot-toast";
 import { authorizedFetch, isSessionExpiredError } from "../Services/authorizedFetch";
 import {
   OrderCalendar,
+  ReadOnlyBanner,
   EMPTY_RANGE,
   isWithinRange,
   type DateRange,
@@ -111,15 +112,18 @@ const PAGE_SIZE = 20;
  * - Smooth 300ms transition with upward lift
  */
 const ProductCard = React.memo(({ 
-  product, 
-  darkMode, 
-  mode, 
-  onAddToCart 
-}: { 
+  product,
+  darkMode,
+  mode,
+  onAddToCart,
+  readOnly = false,
+}: {
   product: Product; 
-  darkMode: boolean; 
-  mode: any; 
+  darkMode: boolean;
+  mode: any;
   onAddToCart: (p: Product) => void;
+  /** Read-only viewers get the price as a label instead of a button that cannot sell. */
+  readOnly?: boolean;
 }) => (
   <div 
     className={`
@@ -148,25 +152,35 @@ const ProductCard = React.memo(({
       <h3 className={`font-semibold text-base mb-1 ${darkMode ? "text-gray-100" : "text-gray-700"}`}>{product.name}</h3>
       <p className="text-xs mb-2 text-gray-400">In stock: {product.quantity}</p>
 
-      <button
-        onClick={() => onAddToCart(product)}
-        disabled={product.quantity === 0}
-        aria-label={
-          product.quantity === 0
-            ? `${product.name} is out of stock`
-            : `Add ${product.name} to cart`
-        }
-        className={`w-full border px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
-          product.quantity === 0
-            ? "border-gray-400 text-gray-400 cursor-not-allowed"
-            : darkMode
-            ? "border-purple-400 text-purple-400 hover:bg-purple-500/20 hover:border-purple-300 hover:text-purple-300 hover:shadow-[0_0_10px_rgba(168,85,247,0.3)]"
-            : "border-purple-600 text-purple-600 hover:bg-purple-50 hover:border-purple-500 hover:shadow-md"
-        }`}
-      >
-        <ShoppingCart className="h-4 w-4" />
-        ${product.price.toFixed(2)}
-      </button>
+      {readOnly ? (
+        <div
+          className={`w-full px-3 py-1.5 text-sm font-semibold ${
+            darkMode ? "text-purple-400" : "text-purple-600"
+          }`}
+        >
+          ${product.price.toFixed(2)}
+        </div>
+      ) : (
+        <button
+          onClick={() => onAddToCart(product)}
+          disabled={product.quantity === 0}
+          aria-label={
+            product.quantity === 0
+              ? `${product.name} is out of stock`
+              : `Add ${product.name} to cart`
+          }
+          className={`w-full border px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+            product.quantity === 0
+              ? "border-gray-400 text-gray-400 cursor-not-allowed"
+              : darkMode
+              ? "border-purple-400 text-purple-400 hover:bg-purple-500/20 hover:border-purple-300 hover:text-purple-300 hover:shadow-[0_0_10px_rgba(168,85,247,0.3)]"
+              : "border-purple-600 text-purple-600 hover:bg-purple-50 hover:border-purple-500 hover:shadow-md"
+          }`}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          ${product.price.toFixed(2)}
+        </button>
+      )}
     </div>
   </div>
 ));
@@ -218,7 +232,11 @@ const PharmacistDashboard: React.FC = () => {
   const startingRef = useRef(false);
 
   // Auth context for proper logout
-  const { logout: authLogout } = useAuth();
+  const { logout: authLogout, canEdit } = useAuth();
+
+  // The read-only observer (HR) borrows this page. Selling, and even marking a
+  // notification read, are refused for that role server-side - so don't offer them.
+  const readOnly = !canEdit;
 
   // Get token from localStorage. Returns null once expired, so we never fire a
   // request that is guaranteed to 401.
@@ -242,6 +260,8 @@ const PharmacistDashboard: React.FC = () => {
 
   const markNotificationsReadOnServer = async (serverIds: number[]) => {
     if (!serverIds || serverIds.length === 0) return;
+    // Marking read is a write; the server refuses it for the read-only role.
+    if (readOnly) return;
     try {
       const token = getToken();
       if (!token) return;
@@ -944,6 +964,7 @@ const PharmacistDashboard: React.FC = () => {
   };
 
   const addToCart = (product: Product) => {
+    if (readOnly) return;
     if (product.quantity <= 0) {
       toast.error("Out of stock!");
       return;
@@ -1000,6 +1021,7 @@ const PharmacistDashboard: React.FC = () => {
   );
 
   const handleCheckout = async () => {
+    if (readOnly) return;
     // Skip if logging out
     if (isLoggingOutRef.current) {
       return;
@@ -1184,7 +1206,9 @@ const PharmacistDashboard: React.FC = () => {
           <div className="flex items-center justify-between px-3 py-2 border-b">
             <div className="font-medium">Notifications</div>
             <div className="flex items-center gap-2">
-              <button onClick={clearNotifications} className={`text-sm px-2 py-1 rounded ${darkMode ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-100 hover:bg-gray-200"}`}>Clear</button>
+              {!readOnly && (
+                <button onClick={clearNotifications} className={`text-sm px-2 py-1 rounded ${darkMode ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-100 hover:bg-gray-200"}`}>Clear</button>
+              )}
               <button onClick={() => { setNotifOpen(false); }} className="text-sm px-2 py-1 rounded hover:bg-gray-200/20">Close</button>
             </div>
           </div>
@@ -1254,6 +1278,9 @@ const PharmacistDashboard: React.FC = () => {
       <div className="flex flex-col lg:flex-row flex-1 min-h-0 lg:overflow-hidden overflow-y-auto">
         {/* Cart - Fixed height with internal scroll, fits 7+ items before scrolling */}
         {/* Raised position, rounded bottom-right corner only */}
+        {/* Dropped entirely for a read-only viewer: a cart that can never check out is
+            worse than no cart, and it costs the product grid a third of the width. */}
+        {!readOnly && (
         <aside
           className={`order-2 lg:order-1 w-full lg:w-80 shrink-0 p-4 flex flex-col
             lg:max-h-[calc(90vh-45px)] rounded-br-2xl border-t lg:border-t-0 lg:border-r
@@ -1328,9 +1355,11 @@ const PharmacistDashboard: React.FC = () => {
             </button>
           </div>
         </aside>
+        )}
 
         {/* Product Grid - Responsive */}
         <main className="order-1 lg:order-2 flex-1 p-4 sm:p-6 min-h-0 lg:overflow-auto">
+          {readOnly && <ReadOnlyBanner darkMode={darkMode} />}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
             {loadingProducts ? (
               <div className="col-span-full text-center py-8">
@@ -1353,6 +1382,7 @@ const PharmacistDashboard: React.FC = () => {
                   darkMode={darkMode}
                   mode={mode}
                   onAddToCart={addToCart}
+                  readOnly={readOnly}
                 />
               ))
             )}

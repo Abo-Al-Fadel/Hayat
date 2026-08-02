@@ -5,9 +5,13 @@ import { loginAs, clearSession } from "./helpers";
 const ROLES = Object.keys(ACCOUNTS) as RoleKey[];
 
 test.describe("Role isolation", () => {
-  for (const role of ROLES) {
-    // Compare by landing page, not by role: HR deliberately shares /admin with Admin,
-    // so that route is not "another role's dashboard" for either of them.
+  // HR is the deliberate exception: it is the read-only observer and is allowed into
+  // all three dashboards, so "cannot open another role's dashboard" is not its rule.
+  // What it may and may not do is covered in full by readonly.spec.ts.
+  //
+  // The other roles are still checked against /hr, because it appears in ALL_LANDINGS -
+  // so this file does assert that nobody else can open the HR view picker.
+  for (const role of ROLES.filter((r) => r !== "hr")) {
     const foreign = ROLES.filter((r) => ALL_LANDINGS[r] !== ALL_LANDINGS[role]);
 
     test(`${role} cannot open another role's dashboard`, async ({ page }) => {

@@ -40,6 +40,8 @@ test.describe("HR can read every page", () => {
     "/api/Supplier",
     "/api/SupplyOrder",
     "/api/SupplyOrder/active",
+    // Was guarded by a write policy, so HR (and Admin) got a 403 on a pure read.
+    "/api/SupplyOrder/storage-manager",
     "/api/Users",
     "/api/Notifications",
     "/api/Stats/financial",
@@ -203,6 +205,9 @@ test.describe("HR in the browser", () => {
   test.beforeEach(async ({ page }) => {
     await clearSession(page);
     await loginAs(page, "hr");
+    // Sign-in now lands on the view picker; these tests are about the admin view.
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/admin$/);
   });
 
   test("lands on the dashboard and is told it is view-only", async ({ page }) => {
@@ -282,14 +287,73 @@ test.describe("HR in the browser", () => {
     await expect(page.getByRole("grid")).toBeVisible({ timeout: 15_000 });
   });
 
-  test("cannot reach another role's dashboard", async ({ page }) => {
-    for (const path of ["/pharmacist", "/storage"]) {
-      await page.goto(path);
-      await expect
-        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
-        .toMatch(/^(\/login|\/admin)$/);
+  test("can reach the other dashboards, and they are read-only too", async ({ page }) => {
+    // HR is the one role that is not kept out of these. It is allowed to look at all
+    // three - the guarantee is that none of them offers it a control.
+    await page.goto("/pharmacist");
+    await expect(page).toHaveURL(/\/pharmacist$/);
+    await expect(page.getByText(/view-only access/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Checkout" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Add .+ to cart$/ })).toHaveCount(0);
+
+    await page.goto("/storage");
+    await expect(page).toHaveURL(/\/storage$/);
+    await expect(page.getByText(/view-only access/i)).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Actions" })).toHaveCount(0);
+  });
+});
+
+test.describe("The HR view picker", () => {
+  test.beforeEach(async ({ page }) => {
+    await clearSession(page);
+    await loginAs(page, "hr");
+  });
+
+  test("signing in lands on the picker, not a dashboard", async ({ page }) => {
+    await expect(page).toHaveURL(/\/hr$/);
+    await expect(page.getByRole("heading", { name: /choose a view/i })).toBeVisible();
+    await expect(page.getByText(/view-only access/i)).toBeVisible();
+  });
+
+  test("each of the three views is reachable from it", async ({ page }) => {
+    const views: [string, RegExp][] = [
+      ["Admin", /\/admin$/],
+      ["Pharmacist", /\/pharmacist$/],
+      ["Storage Manager", /\/storage$/],
+    ];
+
+    for (const [label, url] of views) {
+      await page.goto("/hr");
+      await page.getByRole("link", { name: new RegExp(`^${label}`) }).click();
+      await expect(page).toHaveURL(url, { timeout: 15_000 });
     }
   });
+
+  test("every dashboard offers a way back to the picker", async ({ page }) => {
+    // Without this the only route between views is signing out and back in.
+    for (const path of ["/admin", "/pharmacist", "/storage"]) {
+      await page.goto(path);
+      await page.getByRole("link", { name: /switch view/i }).click();
+      await expect(page).toHaveURL(/\/hr$/, { timeout: 15_000 });
+    }
+  });
+
+  // One test per role rather than a loop over a single page. Signing a second role in
+  // on the same page means clearing localStorage while the first role's dashboard is
+  // still mounted and polling; its next request then finds no token, calls
+  // handleSessionExpired, and the resulting hard redirect interrupts whatever
+  // navigation the test was in the middle of. Playwright gives each test its own
+  // context, so separate tests start genuinely clean.
+  for (const role of ["admin", "pharmacist", "storage"] as const) {
+    test(`${role} cannot open the picker`, async ({ page }) => {
+      await clearSession(page);
+      await loginAs(page, role);
+      await page.goto("/hr");
+      await expect
+        .poll(() => new URL(page.url()).pathname, { timeout: 10_000 })
+        .not.toBe("/hr");
+    });
+  }
 });
 
 test.describe("The HR role is offered in the UI", () => {

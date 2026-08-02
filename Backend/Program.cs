@@ -46,7 +46,15 @@ static void ValidateSigningKey(string? key, bool isDevelopment)
 
     if (burned.Contains(key))
         throw new InvalidOperationException(
-            "JwtSettings:Key is a known-compromised value from this repository's history. Generate a new one.");
+            "JwtSettings:Key is a known-compromised value from this repository's history. " +
+            "Generate a new one. If you have already replaced it in user-secrets and still " +
+            "see this, an environment variable named JwtSettings__Key is overriding them - " +
+            "environment variables win. Check all three scopes:\n" +
+            "  [Environment]::GetEnvironmentVariable('JwtSettings__Key','User')\n" +
+            "  [Environment]::GetEnvironmentVariable('JwtSettings__Key','Machine')\n" +
+            "  $env:JwtSettings__Key\n" +
+            "A shell started before the variable was removed keeps its own stale copy in " +
+            "memory, so restart the terminal (and your IDE) after clearing it.");
 
     if (isDevelopment) return;
 

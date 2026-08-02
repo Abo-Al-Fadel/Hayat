@@ -16,6 +16,31 @@ import "./Login.css";
 import { useAuth } from "../Context/AuthContext";
 import Spinner from "../Components/Spinner/Spinner";
 
+/**
+ * Where a role lands after signing in.
+ *
+ * One function because this used to be written out twice - once for a fresh sign-in and
+ * once for restoring an existing session - and the two drifted apart.
+ *
+ * HR gets the view picker rather than a dashboard: it is read-only across all three, so
+ * it chooses which to look at. See Pages/HrHome.
+ */
+export const landingPathForRole = (role: string): string => {
+  switch (role.trim().toLowerCase()) {
+    case "admin":
+      return "/admin";
+    case "hr":
+      return "/hr";
+    case "pharmacist":
+      return "/pharmacist";
+    case "storagemanager":
+    case "storage manager":
+      return "/storage";
+    default:
+      return "/";
+  }
+};
+
 const Login: React.FC = () => {
   const { login, isAuthenticated, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -55,13 +80,7 @@ const Login: React.FC = () => {
     
     if (isAuthenticated && user && !hasRedirectedRef.current) {
       hasRedirectedRef.current = true;
-      const role = user.role.toLowerCase();
-      
-      // HR shares the admin dashboard, in read-only mode.
-      if (role === "admin" || role === "hr") navigate("/admin", { replace: true });
-      else if (role === "pharmacist") navigate("/pharmacist", { replace: true });
-      else if (role === "storagemanager" || role === "storage manager") navigate("/storage", { replace: true });
-      else navigate("/", { replace: true });
+      navigate(landingPathForRole(user.role), { replace: true });
     }
   }, [isAuthenticated, user, authLoading, navigate]);
 
@@ -72,15 +91,9 @@ const Login: React.FC = () => {
 
     try {
       const loggedUser = await login(username.trim(), password);
-      const role = loggedUser.role.toLowerCase();
-      
 
       // Single redirect with replace
-      // HR shares the admin dashboard, in read-only mode.
-      if (role === "admin" || role === "hr") navigate("/admin", { replace: true });
-      else if (role === "pharmacist") navigate("/pharmacist", { replace: true });
-      else if (role === "storagemanager" || role === "storage manager") navigate("/storage", { replace: true });
-      else navigate("/", { replace: true });
+      navigate(landingPathForRole(loggedUser.role), { replace: true });
     } catch (err: any) {
       const message = err?.response?.data?.message || err?.response?.data || err?.message || "Login failed";
       console.error("[Login] Login failed:", message);

@@ -48,7 +48,13 @@ test.describe("Session expiry", () => {
     await loginAs(page, "admin");
 
     await page.evaluate((t) => localStorage.setItem("token", t), badSignatureToken());
-    await page.goto("/admin");
+
+    // The dashboard mounts, its first API call comes back 401, and handleSessionExpired
+    // does a hard window.location.replace to /login. That redirect can land before this
+    // navigation finishes loading, which cancels it - so Playwright reports ERR_ABORTED
+    // for what is precisely the behaviour under test. The assertions below are what
+    // decide the outcome; the abort is noise.
+    await page.goto("/admin").catch(() => {});
 
     await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
     expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
