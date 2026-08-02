@@ -16,6 +16,7 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
     public DbSet<SupplyOrderItem> SupplyOrderItems { get; set; }
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<PaymentMethod> PaymentMethods { get; set; }
+    public DbSet<MedicineImage> MedicineImages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -28,6 +29,25 @@ public class PharmacyDbContext : IdentityDbContext<AppUser>
             .WithMany(c => c.Medicines)
             .HasForeignKey(m => m.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // One image per medicine, keyed by the medicine itself. Cascade delete so
+        // removing a medicine cannot leave orphaned bytes behind.
+        builder.Entity<MedicineImage>(entity =>
+        {
+            entity.HasKey(i => i.MedicineId);
+
+            entity.HasOne(i => i.Medicine)
+                  .WithOne()
+                  .HasForeignKey<MedicineImage>(i => i.MedicineId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(i => i.ContentType)
+                  .IsRequired()
+                  .HasMaxLength(100);
+
+            entity.Property(i => i.Data)
+                  .IsRequired();
+        });
 
 
         builder.Entity<PaymentMethod>().HasData(

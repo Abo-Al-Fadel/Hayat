@@ -39,6 +39,31 @@ public class MedicineController : ControllerBase
         return Ok(med);
     }
 
+    /// <summary>
+    /// Serves a medicine's uploaded image.
+    ///
+    /// Anonymous by design. These are rendered with a plain &lt;img src&gt;, which cannot
+    /// carry an Authorization header - requiring a token here would simply break every
+    /// image. This matches the previous behaviour exactly: the same files were served
+    /// from wwwroot as anonymous static content. Nothing confidential lives here; the
+    /// prices and costs that do are on the authorised endpoints.
+    ///
+    /// The Content-Type comes from the upload allowlist, never from the client, so a
+    /// file cannot be served back as HTML or SVG and execute in the site's origin.
+    /// </summary>
+    [HttpGet("{id}/image")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 31536000, Location = ResponseCacheLocation.Any)]
+    public async Task<IActionResult> GetImage(int id)
+    {
+        var image = await _medicineService.GetImageAsync(id);
+        if (image is null) return NotFound();
+
+        // Cacheable for a year: the URL carries an upload timestamp, so replacing an
+        // image changes the URL rather than the contents behind it.
+        return File(image.Value.Data, image.Value.ContentType);
+    }
+
     [HttpPost]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Add([FromForm] CreateMedicineDto dto)

@@ -1,6 +1,7 @@
 using AutoMapper;
 using Hayat.Backend.Dtos.Medicine;
 using Hayat.Backend.Interfaces;
+using Hayat.Backend.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace Backend.Services
@@ -91,12 +92,10 @@ namespace Backend.Services
                 }
             }
 
-            string? imagePath = null;
-
-            if (dto.Image != null && dto.Image.Length > 0)
-            {
-                imagePath = await SaveImageAsync(dto.Image);
-            }
+            // Validate the upload before inserting anything, so a rejected image does not
+            // leave a medicine behind.
+            var hasImage = dto.Image != null && dto.Image.Length > 0;
+            if (hasImage) await ReadImageAsync(dto.Image!);
 
             var medicine = new Medicine
             {
@@ -104,11 +103,17 @@ namespace Backend.Services
                 Price = dto.Price,
                 Quantity = dto.Quantity,
                 CategoryId = categoryId,  // Use the validated categoryId
-                Image = imagePath
+                Image = null              // set below: the URL needs the generated id
             };
 
             _context.Medicines.Add(medicine);
             await _context.SaveChangesAsync();
+
+            if (hasImage)
+            {
+                medicine.Image = await StoreImageAsync(medicine.Id, dto.Image!);
+                await _context.SaveChangesAsync();
+            }
 
             // persist notification + broadcast via notification service
             await _notificationService.NotifyMedicineChangeAsync(NotificationAction.Created, medicine, AppRole.Admin);
@@ -158,27 +163,15 @@ namespace Backend.Services
                 medicine.IsHidden = dto.IsHidden.Value;
             }
 
-            // Handle image upload
+            // Handle image upload. Replacing overwrites the single row for this medicine,
+            // so there is no old file to hunt down and delete.
             if (dto.Image != null && dto.Image.Length > 0)
             {
                 _logger.LogInformation("Processing image upload: {FileName}, Size: {Size} bytes",
                     dto.Image.FileName, dto.Image.Length);
 
-                // Delete old image first
-                if (!string.IsNullOrEmpty(medicine.Image))
-                {
-                    var oldPath = Path.Combine(_env.WebRootPath, medicine.Image.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-                    _logger.LogInformation("Attempting to delete old image: {OldPath}", oldPath);
-
-                    if (File.Exists(oldPath))
-                    {
-                        File.Delete(oldPath);
-                        _logger.LogInformation("Old image deleted successfully");
-                    }
-                }
-
-                medicine.Image = await SaveImageAsync(dto.Image);
-                _logger.LogInformation("Image saved successfully: {ImagePath}", medicine.Image);
+                medicine.Image = await StoreImageAsync(medicine.Id, dto.Image);
+                _logger.LogInformation("Image stored: {ImageUrl}", medicine.Image);
             }
 
             await _context.SaveChangesAsync();
@@ -188,11 +181,11 @@ namespace Backend.Services
             return ToDto(medicine, includeCost: true);
         }
 
-        // Uploaded files are served straight back out of wwwroot as static content, so an
-        // unrestricted upload is a stored-XSS vector (.html/.svg served same-origin) as well
-        // as a disk-fill risk. Extension and content type must both be on the allowlist, and
-        // the stored name is always a fresh GUID plus a canonical extension - never anything
-        // derived from the client-supplied filename.
+        // Uploaded images are served back out by MedicineController, so an unrestricted
+        // upload is a stored-XSS vector (.html/.svg rendered same-origin) as well as a
+        // storage-fill risk. Extension and content type must both be on the allowlist, and
+        // the Content-Type sent back to the browser is the canonical one from that
+        // allowlist - never the client-supplied string.
         private const long MaxImageBytes = 5 * 1024 * 1024;
 
         private static readonly Dictionary<string, string> AllowedImageTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -209,7 +202,12 @@ namespace Backend.Services
             ".jpg", ".jpeg", ".png", ".webp", ".gif"
         };
 
-        private async Task<string> SaveImageAsync(IFormFile image)
+        /// <summary>
+        /// Validates an upload and returns its bytes plus the canonical content type.
+        /// Storage is the caller's business - it needs the medicine's id, which does not
+        /// exist yet when creating one.
+        /// </summary>
+        private static async Task<(byte[] Data, string ContentType)> ReadImageAsync(IFormFile image)
         {
             if (image.Length > MaxImageBytes)
                 throw new InvalidOperationException($"Image exceeds the {MaxImageBytes / (1024 * 1024)} MB limit.");
@@ -221,22 +219,64 @@ namespace Backend.Services
             if (!AllowedImageTypes.TryGetValue(image.ContentType ?? string.Empty, out var canonicalExtension))
                 throw new InvalidOperationException($"Unsupported image content type '{image.ContentType}'.");
 
-            var webRoot = _env.WebRootPath;
-            if (string.IsNullOrWhiteSpace(webRoot))
-                throw new InvalidOperationException("WebRootPath is not configured; cannot store uploaded images.");
+            // Map back from the canonical extension so the stored type can only ever be
+            // one of the five we allow, whatever the client claimed.
+            var canonicalContentType = AllowedImageTypes
+                .First(pair => pair.Value == canonicalExtension && pair.Key != "image/pjpeg").Key;
 
-            var uploads = Path.Combine(webRoot, "images", "medicines");
-            Directory.CreateDirectory(uploads);
+            using var buffer = new MemoryStream();
+            await image.CopyToAsync(buffer);
 
-            var fileName = Guid.NewGuid() + canonicalExtension;
-            var filePath = Path.Combine(uploads, fileName);
+            return (buffer.ToArray(), canonicalContentType);
+        }
 
-            _logger.LogInformation("Saving image to: {FilePath}", filePath);
+        /// <summary>
+        /// Stores (or replaces) a medicine's image and returns the URL to reach it.
+        ///
+        /// The URL carries the upload timestamp so a replaced image is not masked by a
+        /// cached copy of the previous one - the path alone never changes.
+        /// </summary>
+        private async Task<string> StoreImageAsync(int medicineId, IFormFile image)
+        {
+            var (data, contentType) = await ReadImageAsync(image);
 
-            await using var stream = new FileStream(filePath, FileMode.CreateNew);
-            await image.CopyToAsync(stream);
+            var existing = await _context.MedicineImages.FindAsync(medicineId);
+            if (existing is null)
+            {
+                _context.MedicineImages.Add(new MedicineImage
+                {
+                    MedicineId = medicineId,
+                    Data = data,
+                    ContentType = contentType,
+                    UploadedAtUtc = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                existing.Data = data;
+                existing.ContentType = contentType;
+                existing.UploadedAtUtc = DateTime.UtcNow;
+            }
 
-            return "/images/medicines/" + fileName;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Stored {Bytes} byte {ContentType} image for medicine {MedicineId}",
+                data.Length, contentType, medicineId);
+
+            return BuildImageUrl(medicineId, DateTime.UtcNow);
+        }
+
+        internal static string BuildImageUrl(int medicineId, DateTime uploadedAtUtc) =>
+            $"/api/Medicine/{medicineId}/image?v={uploadedAtUtc.Ticks}";
+
+        public async Task<(byte[] Data, string ContentType)?> GetImageAsync(int medicineId)
+        {
+            var image = await _context.MedicineImages
+                .AsNoTracking()
+                .FirstOrDefaultAsync(i => i.MedicineId == medicineId);
+
+            return image is null ? null : (image.Data, image.ContentType);
         }
 
 
