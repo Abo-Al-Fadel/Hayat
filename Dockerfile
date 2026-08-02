@@ -27,19 +27,27 @@ RUN dotnet publish Backend/Backend.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# Run unprivileged. A container compromise should not also be root.
-# The image ships a `app` user (uid 1654) for exactly this.
-USER $APP_UID
-
 COPY --from=build /app/publish .
+
+# MedicineService writes uploaded images to wwwroot/images/medicines at runtime.
+# COPY runs as root, so without this the directory is root-owned and the app -
+# running unprivileged below - cannot create it or write into it. That surfaces
+# as a 500 on "add product", with nothing wrong in the application code.
+RUN mkdir -p /app/wwwroot/images/medicines \
+    && chown -R $APP_UID /app/wwwroot
+
+# Run unprivileged. A container compromise should not also be root.
+# The image ships an `app` user (uid 1654) for exactly this.
+USER $APP_UID
 
 # Overridden by $PORT where the platform sets one.
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 
-# Uploaded medicine images are written under wwwroot. On a platform with an
-# ephemeral filesystem they vanish on redeploy - mount a volume here, or move
-# uploads to object storage, if that matters. See DEPLOYMENT.md.
-VOLUME ["/app/wwwroot/uploads"]
+# NOTE: uploaded images live on the container filesystem, which is ephemeral on
+# most hosts - they disappear on every redeploy. Mount a persistent disk at
+# /app/wwwroot/images/medicines, or move uploads to object storage, if that
+# matters. See DEPLOYMENT.md. No VOLUME is declared here: it would create an
+# anonymous volume that survives nothing and hides the problem.
 
 ENTRYPOINT ["dotnet", "Backend.dll"]

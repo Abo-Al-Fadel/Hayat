@@ -93,6 +93,20 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: The upload directory is writable by the unprivileged user
+        run: |
+          set -euo pipefail
+
+          # Runs as the image's USER, so this is the same identity the app has.
+          # A root-owned wwwroot makes "add product" fail with a 500 and no clue
+          # in the application logs - the exact failure this check exists for.
+          docker run --rm --entrypoint sh hayat-api:ci -c '
+            test -d /app/wwwroot/images/medicines || { echo "upload directory missing"; exit 1; }
+            touch /app/wwwroot/images/medicines/.probe || { echo "upload directory not writable"; exit 1; }
+            rm /app/wwwroot/images/medicines/.probe
+            echo "upload directory is writable by $(id -u)"
+          '
+
       - name: The image starts and refuses a weak signing key
         run: |
           set -euo pipefail
