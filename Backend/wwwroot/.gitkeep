@@ -1,0 +1,9 @@
+Keeps this directory in git.
+
+ASP.NET's static web assets loader resolves WebRootPath at start-up and throws
+DirectoryNotFoundException if wwwroot is missing. Git does not track empty
+directories, so when the last uploaded image was removed from here the folder
+disappeared from a fresh clone and the app would not start.
+
+Medicine images now live in the database (see MedicineImage), so nothing is
+written here any more - but the directory still has to exist.

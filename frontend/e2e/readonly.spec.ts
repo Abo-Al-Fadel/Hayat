@@ -291,3 +291,32 @@ test.describe("HR in the browser", () => {
     }
   });
 });
+
+test.describe("The HR role is offered in the UI", () => {
+  test("an admin can pick HR when creating a user", async ({ page }) => {
+    // The role existed server-side but was missing from both dropdowns, so there was
+    // no way to actually give it to anyone.
+    await clearSession(page);
+    await loginAs(page, "admin");
+    await page.getByRole("button", { name: "Users", exact: true }).click();
+    await page.getByRole("button", { name: "Add User" }).click();
+
+    const roleSelect = page.locator("select").first();
+    await expect(roleSelect.locator('option[value="HR"]')).toHaveCount(1);
+  });
+
+  test("an admin can change an existing user to HR", async ({ page }) => {
+    await clearSession(page);
+    await loginAs(page, "admin");
+    await page.getByRole("button", { name: "Users", exact: true }).click();
+    await page.waitForTimeout(1200);
+
+    // Every per-user role dropdown must offer it, not just the creation form.
+    const rowSelects = page.locator("select");
+    const count = await rowSelects.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      await expect(rowSelects.nth(i).locator('option[value="HR"]')).toHaveCount(1);
+    }
+  });
+});

@@ -37,15 +37,13 @@ public class MedicineServiceTests
     private static MedicineService CreateService(
         PharmacyDbContext context,
         INotificationService? notificationService = null,
-        IMapper? mapper = null,
-        IWebHostEnvironment? env = null)
+        IMapper? mapper = null)
     {
         return new MedicineService(
             context,
             notificationService ?? Mock.Of<INotificationService>(),
             Mock.Of<ILogger<MedicineService>>(),
             mapper ?? CreateMapper(),
-            env ?? Mock.Of<IWebHostEnvironment>(),
             CreatePricingService()
         );
     }

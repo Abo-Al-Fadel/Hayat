@@ -12,16 +12,16 @@ namespace Backend.Services
         private readonly INotificationService _notificationService;
         private readonly ILogger<MedicineService> _logger;
         private readonly IMapper _mapper;
-        private readonly IWebHostEnvironment _env;
         private readonly IPricingService _pricingService;
 
-        public MedicineService(PharmacyDbContext context, INotificationService notificationService, ILogger<MedicineService> logger, IMapper mapper, IWebHostEnvironment env, IPricingService pricingService)
+        // No IWebHostEnvironment: images live in the database now, so this service does not
+        // touch the filesystem at all. Keeping the dependency would imply otherwise.
+        public MedicineService(PharmacyDbContext context, INotificationService notificationService, ILogger<MedicineService> logger, IMapper mapper, IPricingService pricingService)
         {
             _context = context;
             _notificationService = notificationService;
             _logger = logger;
             _mapper = mapper;
-            _env = env;
             _pricingService = pricingService;
         }
 

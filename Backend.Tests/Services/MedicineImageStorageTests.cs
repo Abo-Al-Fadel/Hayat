@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -38,7 +37,6 @@ public class MedicineImageStorageTests
             Mock.Of<INotificationService>(),
             Mock.Of<ILogger<MedicineService>>(),
             mapper,
-            Mock.Of<IWebHostEnvironment>(),
             new PricingService(Options.Create(new PricingSettings
             {
                 MarkupTiers = new List<MarkupTier> { new() { UpToCost = 1000m, MarkupPercent = 20m } },

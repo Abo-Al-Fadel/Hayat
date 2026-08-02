@@ -1644,6 +1644,7 @@ export default function AdminDashboard() {
                         <option value="Pharmacist">Pharmacist</option>
                         <option value="Admin">Admin</option>
                         <option value="StorageManager">Storage Manager</option>
+                        <option value="HR">HR (view-only)</option>
                       </select>
                     </div>
                     <div className="flex gap-2 mt-4">
@@ -1736,12 +1737,15 @@ export default function AdminDashboard() {
                                 ? "bg-red-50 text-red-800 border-red-300 dark:bg-gray-700 dark:text-red-300 dark:border-red-500/50 focus:ring-red-500"
                                 : user.role.toLowerCase() === "pharmacist"
                                 ? "bg-cyan-50 text-cyan-800 border-cyan-300 dark:bg-gray-700 dark:text-cyan-300 dark:border-cyan-500/50 focus:ring-cyan-500"
+                                : user.role.toLowerCase() === "hr"
+                                ? "bg-slate-100 text-slate-700 border-slate-300 dark:bg-gray-700 dark:text-slate-300 dark:border-slate-500/50 focus:ring-slate-500"
                                 : "bg-orange-50 text-orange-800 border-orange-300 dark:bg-gray-700 dark:text-orange-300 dark:border-orange-500/50 focus:ring-orange-500"
                             }`}
                           >
                             <option value="Admin">Admin</option>
                             <option value="Pharmacist">Pharmacist</option>
                             <option value="StorageManager">Storage Manager</option>
+                            <option value="HR">HR (view-only)</option>
                           </select>
                           {/* Edit Button - opens edit modal */}
                           <button
