@@ -26,71 +26,98 @@ public class OrderService : IOrderService
             .Select(g => new { MedicineId = g.Key, Quantity = g.Sum(x => x.Quantity) })
             .ToList();
 
-        var order = new Order
+        // The transaction runs inside the execution strategy so a transient failure
+        // replays the whole thing. Retrying a half-applied transaction would be worse
+        // than failing: stock decrements without an order to account for them.
+        var strategy = _context.Database.CreateExecutionStrategy();
+
+        var result = await strategy.ExecuteAsync(async () =>
         {
-            CreatedAt = DateTime.UtcNow,
-            PaymentMethod = dto.PaymentMethod,
-            Items = new List<OrderItem>()
-        };
+            // Everything mutable is built inside the delegate. A retry re-runs this
+            // block, and anything carried in from outside would be applied twice - a
+            // second attempt would append the same lines to the same order object.
+            //
+            // The change tracker is cleared for the same reason: entities added by a
+            // failed attempt are still tracked, and would be inserted again alongside
+            // this attempt's.
+            _context.ChangeTracker.Clear();
 
-        decimal total = 0;
-
-        // Track medicines that may hit low stock threshold
-        var lowStockChecks = new List<(Medicine Medicine, int PreviousQty, int SoldQty)>();
-
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-
-        foreach (var item in requestedItems)
-        {
-            var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.Id == item.MedicineId);
-            if (medicine == null)
+            var order = new Order
             {
-                await transaction.RollbackAsync();
-                return (false, $"Medicine with ID {item.MedicineId} not found.", null!);
+                CreatedAt = DateTime.UtcNow,
+                PaymentMethod = dto.PaymentMethod,
+                Items = new List<OrderItem>()
+            };
+
+            decimal total = 0;
+
+            // Track medicines that may hit low stock threshold
+            var lowStockChecks = new List<(Medicine Medicine, int PreviousQty, int SoldQty)>();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            foreach (var item in requestedItems)
+            {
+                var medicine = await _context.Medicines.FirstOrDefaultAsync(m => m.Id == item.MedicineId);
+                if (medicine == null)
+                {
+                    await transaction.RollbackAsync();
+                    return (Success: false, Error: $"Medicine with ID {item.MedicineId} not found.",
+                            Order: (Order?)null, LowStock: lowStockChecks);
+                }
+
+                // Conditional decrement executed as a single UPDATE ... WHERE Quantity >= n.
+                // Two concurrent checkouts therefore cannot both pass the stock check and
+                // oversell; the loser gets 0 rows affected and is rejected.
+                var quantity = item.Quantity;
+                var rowsAffected = await _context.Medicines
+                    .Where(m => m.Id == item.MedicineId && m.Quantity >= quantity)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(m => m.Quantity, m => m.Quantity - quantity));
+
+                if (rowsAffected == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return (Success: false, Error: $"Not enough stock for {medicine.Name}",
+                            Order: (Order?)null, LowStock: lowStockChecks);
+                }
+
+                // ExecuteUpdate bypasses the change tracker, so refresh to read the true
+                // post-decrement quantity rather than trusting the pre-read value.
+                await _context.Entry(medicine).ReloadAsync();
+                var previousQty = medicine.Quantity + quantity;
+
+                lowStockChecks.Add((medicine, previousQty, quantity));
+
+                order.Items.Add(new OrderItem
+                {
+                    MedicineId = medicine.Id,
+                    Quantity = quantity,
+                    Price = medicine.Price,
+                    // Snapshot the cost so gross profit for this sale stays accurate even
+                    // after the medicine's weighted-average cost changes later.
+                    CostPrice = medicine.CostPrice
+                });
+
+                total += medicine.Price * quantity;
             }
 
-            // Conditional decrement executed as a single UPDATE ... WHERE Quantity >= n.
-            // Two concurrent checkouts therefore cannot both pass the stock check and
-            // oversell; the loser gets 0 rows affected and is rejected.
-            var quantity = item.Quantity;
-            var rowsAffected = await _context.Medicines
-                .Where(m => m.Id == item.MedicineId && m.Quantity >= quantity)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(m => m.Quantity, m => m.Quantity - quantity));
+            order.TotalPrice = total;
 
-            if (rowsAffected == 0)
-            {
-                await transaction.RollbackAsync();
-                return (false, $"Not enough stock for {medicine.Name}", null!);
-            }
+            _context.Orders.Add(order);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-            // ExecuteUpdate bypasses the change tracker, so refresh to read the true
-            // post-decrement quantity rather than trusting the pre-read value.
-            await _context.Entry(medicine).ReloadAsync();
-            var previousQty = medicine.Quantity + quantity;
+            return (Success: true, Error: (string?)null, Order: (Order?)order, LowStock: lowStockChecks);
+        });
 
-            lowStockChecks.Add((medicine, previousQty, quantity));
+        if (!result.Success)
+            return (false, result.Error, null!);
 
-            order.Items.Add(new OrderItem
-            {
-                MedicineId = medicine.Id,
-                Quantity = quantity,
-                Price = medicine.Price,
-                // Snapshot the cost so gross profit for this sale stays accurate even
-                // after the medicine's weighted-average cost changes later.
-                CostPrice = medicine.CostPrice
-            });
-
-            total += medicine.Price * quantity;
-        }
-
-        order.TotalPrice = total;
-
-        _context.Orders.Add(order);
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
+        // Notifications sit outside the strategy: they are not part of the transaction,
+        // and replaying them on a retry would send duplicate alerts for one sale.
 
         // 1. SILENT STOCK UPDATE - Admin sees updated stock immediately (NO notification)
-        foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
+        foreach (var (medicine, previousQty, soldQty) in result.LowStock)
         {
             await _notificationService.NotifyMedicineStockUpdatedAsync(
                 medicine.Id,
@@ -101,14 +128,14 @@ public class OrderService : IOrderService
         }
 
         // 2. LOW STOCK ALERTS - Check each medicine for threshold crossing
-        foreach (var (medicine, previousQty, soldQty) in lowStockChecks)
+        foreach (var (medicine, previousQty, soldQty) in result.LowStock)
         {
             await _notificationService.NotifyLowStockAlertAsync(medicine, previousQty, soldQty);
         }
 
         // NOTE: NotifyOrderCreatedAsync is now a no-op - Admin doesn't receive sale notifications
 
-        return (true, null, order);
+        return (true, null, result.Order!);
     }
 
     public async Task<string?> GetInvoiceAsync(int orderId)
