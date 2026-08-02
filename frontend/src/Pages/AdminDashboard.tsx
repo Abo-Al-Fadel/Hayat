@@ -41,10 +41,11 @@ import {
 import {
   StatCard,
   ConfirmModal,
-  DateRangeFilter,
+  OrderCalendar,
   EMPTY_RANGE,
   isWithinRange,
   isRangeActive,
+  describeRange,
   type DateRange,
 } from "../Components/ui";
 import { describePasswordProblems, PASSWORD_HINT } from "../utils/passwordPolicy";
@@ -1088,6 +1089,19 @@ export default function AdminDashboard() {
     });
   }, [orders, ordersSearchTerm, ordersDateRange]);
 
+  const ordersFiltered = isRangeActive(ordersDateRange) || ordersSearchTerm.trim() !== "";
+
+  const visibleOrdersTotal = useMemo(
+    () => visibleOrders.reduce((sum, o) => sum + o.totalPrice, 0),
+    [visibleOrders]
+  );
+
+  /** Day markers come from every order, not the filtered list - the calendar shows where the data is. */
+  const calendarItems = useMemo(
+    () => orders.map((o) => ({ date: o.createdAt, amount: o.totalPrice })),
+    [orders]
+  );
+
   // ──────────────────────────────────────────────────────────────────────────
   // Derived data
   // ──────────────────────────────────────────────────────────────────────────
@@ -1442,12 +1456,16 @@ export default function AdminDashboard() {
           {/* ─── Orders Page ───────────────────────────────────────────────── */}
           {activePage === "orders" && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <StatCard label="Total Orders" value={orders.length} />
+              {/* One count per figure. "Total Orders" and "Shown" used to sit side by
+                  side reading the same number whenever no filter was on, which looked
+                  like the list had been counted twice. */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                 <StatCard
-                  label={isRangeActive(ordersDateRange) ? "Orders in range" : "Shown"}
-                  value={visibleOrders.length}
+                  label={ordersFiltered ? "Orders shown" : "Total orders"}
+                  value={ordersFiltered ? `${visibleOrders.length} of ${orders.length}` : orders.length}
                 />
+                <StatCard label="Value shown" value={`$${visibleOrdersTotal.toFixed(2)}`} />
+                <StatCard label="Period" value={describeRange(ordersDateRange)} />
               </div>
 
               {/* Orders Search */}
@@ -1461,33 +1479,32 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Date filter */}
-              <div className="mb-4 p-3 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                <DateRangeFilter
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] gap-4 items-start">
+                <OrderCalendar
+                  items={calendarItems}
                   value={ordersDateRange}
                   onChange={setOrdersDateRange}
                   darkMode={darkMode}
-                  summary={
-                    isRangeActive(ordersDateRange)
-                      ? `${visibleOrders.length} of ${orders.length} orders`
-                      : undefined
-                  }
+                  noun="orders"
+                  selectedCount={visibleOrders.length}
                 />
-              </div>
 
-              {ordersLoading ? (
-                <div className="text-center text-gray-500">Loading orders...</div>
-              ) : visibleOrders.length === 0 ? (
-                <div className="text-center text-gray-500">
-                  {orders.length === 0 ? "No orders found" : "No orders match these filters"}
+                <div>
+                  {ordersLoading ? (
+                    <div className="text-center text-gray-500 py-8">Loading orders...</div>
+                  ) : visibleOrders.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      {orders.length === 0 ? "No orders found" : "No orders match these filters"}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {visibleOrders.map((order) => (
+                        <OrderListItem key={order.id} order={order} onView={fetchOrderDetail} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {visibleOrders.map((order) => (
-                      <OrderListItem key={order.id} order={order} onView={fetchOrderDetail} />
-                    ))}
-                </div>
-              )}
+              </div>
             </>
           )}
 

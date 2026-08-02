@@ -4,4 +4,12 @@ export { StatCard } from "./StatCard";
 export { ImageUploader } from "./ImageUploader";
 export { ConfirmModal } from "./ConfirmModal";
 export { DeleteConfirmModal } from "./DeleteConfirmModal";
-export { DateRangeFilter, EMPTY_RANGE, isWithinRange, isRangeActive, type DateRange } from "./DateRangeFilter";
+export { OrderCalendar, type CalendarItem } from "./OrderCalendar";
+// Date maths lives in utils/dateRange so it stays testable without rendering.
+export {
+  EMPTY_RANGE,
+  isWithinRange,
+  isRangeActive,
+  describeRange,
+  type DateRange,
+} from "../../utils/dateRange";

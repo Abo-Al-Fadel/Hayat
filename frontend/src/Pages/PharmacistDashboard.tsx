@@ -22,10 +22,9 @@ import {
 import toast, { Toaster } from "react-hot-toast";
 import { authorizedFetch, isSessionExpiredError } from "../Services/authorizedFetch";
 import {
-  DateRangeFilter,
+  OrderCalendar,
   EMPTY_RANGE,
   isWithinRange,
-  isRangeActive,
   type DateRange,
 } from "../Components/ui";
 import { getValidToken } from "../utils/token";
@@ -883,6 +882,12 @@ const PharmacistDashboard: React.FC = () => {
     [orders, ordersDateRange]
   );
 
+  /** Markers cover every order, so quiet days stay visible as quiet rather than absent. */
+  const orderCalendarItems = useMemo(
+    () => orders.map((o) => ({ date: o.createdAt, amount: o.total })),
+    [orders]
+  );
+
   /**
    * Handle category selection - SINGLE SELECT ONLY
    * Clicking same category deselects it, clicking different category switches to it
@@ -1376,25 +1381,23 @@ const PharmacistDashboard: React.FC = () => {
       {ordersModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setOrdersModalOpen(false)} />
-          <div className={`relative max-w-3xl w-full max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+          <div className={`relative max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6 shadow-xl ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">Orders</h3>
+              <h3 className="text-lg font-semibold">Orders &amp; invoices</h3>
               <div className="flex items-center gap-2">
                 <button onClick={() => { setOrdersModalOpen(false); setSelectedOrder(null); }} className={`${darkMode ? "bg-red-700 hover:bg-red-600 text-white" : "bg-red-100 hover:bg-red-200 text-red-800"} px-3 py-1 rounded`}>Close</button>
               </div>
             </div>
 
-            {/* Date filter */}
-            <div className="mb-3">
-              <DateRangeFilter
+            {/* Calendar picks the day, the list narrows to it, the pane shows the invoice. */}
+            <div className="mb-4">
+              <OrderCalendar
+                items={orderCalendarItems}
                 value={ordersDateRange}
                 onChange={setOrdersDateRange}
                 darkMode={darkMode}
-                summary={
-                  isRangeActive(ordersDateRange)
-                    ? `${visibleOrders.length} of ${orders.length} orders`
-                    : undefined
-                }
+                noun="orders"
+                selectedCount={visibleOrders.length}
               />
             </div>
 
@@ -1439,7 +1442,8 @@ const PharmacistDashboard: React.FC = () => {
                 )}
               </div>
 
-              <div className="w-2/3 pl-4">
+              {/* Was a bare w-2/3, which stayed two-thirds wide on a phone. */}
+              <div className="w-full sm:w-2/3 sm:pl-4">
                 {selectedOrder ? (
                   <div>
                     <div className="flex justify-between items-start">
