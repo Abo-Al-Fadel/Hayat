@@ -544,7 +544,9 @@ export default function StorageManagerDashboard() {
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        {/* p-4 on a phone rather than p-6: 48px of horizontal padding out of 360 is
+            a seventh of the screen. Matches what AdminDashboard's main already uses. */}
+        <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
           {readOnly && <ReadOnlyBanner darkMode={darkMode} />}
           {loading ? (
             <div className="flex items-center justify-center h-64">
@@ -565,8 +567,14 @@ export default function StorageManagerDashboard() {
           ) : (
             <>
               {/* Orders Table */}
-              <div className={`rounded-lg shadow overflow-hidden ${darkMode ? "bg-gray-800" : "bg-white"}`}>
-                <table className="w-full">
+              {/* overflow-hidden here clipped the table instead of scrolling it: at
+                  360px the six columns need ~617px, so Status and Actions - the status
+                  dropdown being the whole point of this page - were cut off with no way
+                  to reach them. overflow-x-auto is what InvoiceModal and FinancePanel
+                  already do with their tables; this was the odd one out.
+                  rounded-lg is kept on the outer box, so the corners still clip. */}
+              <div className={`rounded-lg shadow overflow-x-auto ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+                <table className="w-full min-w-[640px]">
                   <thead className={darkMode ? "bg-gray-700" : "bg-gray-50"}>
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">

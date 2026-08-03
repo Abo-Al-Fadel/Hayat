@@ -19,6 +19,72 @@ const VIEWPORTS = [
 
 const ROLES: RoleKey[] = ["admin", "pharmacist", "storage"];
 
+/** The sizes the phone pass targets, plus the small tablet. */
+const SMALL_SIZES = [
+  { name: "360", width: 360, height: 640 },
+  { name: "390", width: 390, height: 844 },
+  { name: "768", width: 768, height: 1024 },
+] as const;
+
+const THEMES = ["light", "dark"] as const;
+
+/**
+ * Forces a theme before the dashboard mounts.
+ *
+ * Two keys because the pharmacist page kept its own: useDarkMode writes "darkMode",
+ * PharmacistDashboard writes "pharmacistThemeMode". Seeding both means one helper
+ * works for every role without hunting for a toggle button whose label differs per
+ * page.
+ */
+async function useTheme(page: Page, theme: (typeof THEMES)[number]) {
+  const dark = theme === "dark";
+  await page.evaluate((isDark) => {
+    localStorage.setItem("darkMode", String(isDark));
+    localStorage.setItem("pharmacistThemeMode", isDark ? "dark" : "light");
+  }, dark);
+}
+
+/**
+ * Content that an overflow-hidden ancestor has amputated.
+ *
+ * This is the gap offscreenElements() above cannot see. That helper treats any
+ * scrolling *or hidden* ancestor as "contained, therefore fine" - which is true for
+ * overflow-x-auto, where the user can scroll to the rest, and false for
+ * overflow-hidden, where the remainder simply does not exist as far as the user is
+ * concerned. A six-column table clipped to three passes that check while being
+ * unusable, which is exactly how the storage dashboard shipped.
+ *
+ * Elements that truncate text on purpose are excluded: text-overflow: ellipsis is a
+ * deliberate, visible affordance, not silent amputation.
+ */
+async function clippedContent(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const offenders: string[] = [];
+
+    for (const el of Array.from(document.body.querySelectorAll<HTMLElement>("*"))) {
+      const style = getComputedStyle(el);
+      if (style.overflowX !== "hidden") continue;
+      // Deliberate single-line truncation announces itself with an ellipsis.
+      if (style.textOverflow === "ellipsis") continue;
+
+      // 3px of slack for sub-pixel layout rounding.
+      const lost = el.scrollWidth - el.clientWidth;
+      if (lost <= 3) continue;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+
+      offenders.push(
+        `${el.tagName.toLowerCase()}.${(el.className || "").toString().split(" ").slice(0, 3).join(".")} ` +
+          `hides ${lost}px of ${el.scrollWidth}px`
+      );
+      if (offenders.length >= 5) break;
+    }
+
+    return offenders;
+  });
+}
+
 /** How far the document scrolls sideways. Anything over a rounding pixel is a bug. */
 async function horizontalOverflow(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -200,4 +266,41 @@ test.describe("Storage manager fits a phone", () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
     expect(await offscreenElements(page)).toEqual([]);
   });
+
+  test("the supply order table can be scrolled to its last column", async ({ page }) => {
+    // The table needs ~640px for six columns and the phone gives it ~330. That is
+    // fine - as long as the remainder is reachable. It used to sit in an
+    // overflow-hidden box, so Status and Actions were cut off entirely, and the
+    // status dropdown is the only control on this page.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await clearSession(page);
+    await loginAs(page, "storage");
+    await page.waitForTimeout(1500);
+
+    const table = page.locator("table").first();
+    await expect(table).toBeVisible({ timeout: 15_000 });
+
+    const scroller = page.locator("div:has(> table)").last();
+    const before = await scroller.evaluate((el) => ({
+      overflowX: getComputedStyle(el).overflowX,
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+
+    // Wider than its box - so it must be a scroller, not a clipper.
+    expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
+    expect(["auto", "scroll"], "the table's box must scroll, not clip").toContain(before.overflowX);
+
+    // And scrolling actually reaches the end.
+    await scroller.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
+    const scrolledTo = await scroller.evaluate((el) => el.scrollLeft);
+    expect(scrolledTo).toBeGreaterThan(0);
+
+    // The header cell of the last column is now inside the viewport.
+    const lastHeader = page.locator("table thead th").last();
+    const box = await lastHeader.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(360 + 1);
+  });
 });
+
