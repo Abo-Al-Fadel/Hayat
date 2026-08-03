@@ -332,6 +332,34 @@ test.describe("Storage manager fits a phone", () => {
   });
 });
 
+/**
+ * The check the older assertions above cannot make.
+ *
+ * Explicit coverage at 360, 390 and 768 in both themes: dark mode is a different set
+ * of border and padding utilities on several of these panels, so a layout that fits
+ * in one theme is not proof of the other.
+ */
+test.describe("Nothing is clipped out of reach", () => {
+  for (const role of ROLES) {
+    for (const size of SMALL_SIZES) {
+      for (const theme of THEMES) {
+        test(`${role} @${size.name} ${theme}`, async ({ page }) => {
+          await page.setViewportSize({ width: size.width, height: size.height });
+          await clearSession(page);
+          await useTheme(page, theme);
+          await loginAs(page, role);
+          await page.waitForLoadState("networkidle");
+          await page.waitForTimeout(1000);
+
+          expect(
+            await clippedContent(page),
+            `${role} @${size.name} ${theme} amputates content`
+          ).toEqual([]);
+        });
+      }
+    }
+  }
+});
 
 test.describe("Admin sections are not clipped on a phone", () => {
   for (const theme of THEMES) {
