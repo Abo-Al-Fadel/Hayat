@@ -126,7 +126,7 @@ public class MedicineController : ControllerBase
     public async Task<IActionResult> Search([FromQuery] string? name)
     {
         var isAdmin = User.IsInRole("Admin");
-        var medicines = await _medicineService.SearchMedicinesAsync(name ?? string.Empty, includeHidden: isAdmin);
+        var medicines = await _medicineService.SearchMedicinesAsync(name ?? string.Empty, includeHidden: isAdmin, includeCost: isAdmin);
         // "No match" is an empty result set, not a 404.
         return Ok(medicines);
     }

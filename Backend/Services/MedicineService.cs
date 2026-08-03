@@ -321,7 +321,7 @@ namespace Backend.Services
             return message;
         }
 
-        public async Task<List<Medicine>> SearchMedicinesAsync(string name, bool includeHidden = true)
+        public async Task<List<MedicineDto>> SearchMedicinesAsync(string name, bool includeHidden = true, bool includeCost = false)
         {
             // AsNoTracking for read-only search results
             var query = _context.Medicines
@@ -331,7 +331,12 @@ namespace Backend.Services
             if (!includeHidden)
                 query = query.Where(m => !m.IsHidden);
 
-            return await query.ToListAsync();
+            // Mapped through ToDto like every other catalogue read. This used to return
+            // the Medicine entity itself, which carries CostPrice - so the one endpoint
+            // that skipped the DTO handed the pharmacy's purchase price to every role
+            // allowed to search, Pharmacist and the read-only observer included.
+            var list = await query.ToListAsync();
+            return list.Select(m => ToDto(m, includeCost)).ToList();
         }
 
         public async Task<List<MedicineDto>> GetByCategoryAsync(int categoryId, bool includeHidden = true, bool includeCost = false)

@@ -26,11 +26,17 @@ public class MedicineServiceTests
 
     private static IMapper CreateMapper()
     {
+        // The real profile, not a hand-rolled CreateMap<Medicine, MedicineDto>().
+        //
+        // That shortcut auto-mapped CostPrice and MarkupPercent, which production
+        // deliberately ignores so the service can populate them only for callers
+        // allowed to see cost. A test double that maps them anyway cannot fail on a
+        // cost leak through ToDto - the exact bug these tests are meant to catch.
+        //
         // AutoMapper 15 requires an ILoggerFactory on MapperConfiguration.
-        var config = new MapperConfiguration(cfg =>
-        {
-            cfg.CreateMap<Medicine, MedicineDto>();
-        }, NullLoggerFactory.Instance);
+        var config = new MapperConfiguration(
+            cfg => cfg.AddProfile<Backend.Profiles.MedicineProfile>(),
+            NullLoggerFactory.Instance);
         return config.CreateMapper();
     }
 
@@ -251,5 +257,90 @@ public class MedicineServiceTests
         // Verify in database
         var dbMedicine = await context.Medicines.FindAsync(1);
         Assert.Equal(25, dbMedicine!.LowStockThreshold);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SearchMedicinesAsync - supplier cost must not ride along
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Search is reachable by Pharmacist and the read-only HR observer, neither of whom
+    /// may see what the pharmacy paid for a medicine. Every other catalogue read maps to
+    /// MedicineDto and gates CostPrice behind an includeCost flag; search alone returned
+    /// the raw entity, so the cost was serialised straight onto the wire.
+    /// </summary>
+    [Fact]
+    public async Task SearchMedicinesAsync_WithholdsCost_WhenCallerMayNotSeeIt()
+    {
+        using var context = CreateInMemoryDbContext();
+        context.Medicines.Add(new Medicine
+        {
+            Id = 1,
+            Name = "Aspirin",
+            Price = 20m,
+            Quantity = 10,
+            CostPrice = 12.34m
+        });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+
+        // Cost is opt-in: the default must be to withhold it.
+        var results = await service.SearchMedicinesAsync("Aspirin", includeHidden: true);
+
+        // Asserted on the serialised payload, because that is what actually leaves the
+        // process - a property that is merely null on the object is fine, a number on
+        // the wire is not.
+        var payload = System.Text.Json.JsonSerializer.Serialize(results);
+        Assert.DoesNotContain("12.34", payload);
+
+        var only = Assert.Single(results);
+        Assert.Null(only.CostPrice);
+        Assert.Null(only.MarkupPercent);
+
+        // The rest of the record still has to be usable, or the search box breaks.
+        Assert.Equal("Aspirin", only.Name);
+        Assert.Equal(20m, only.Price);
+        Assert.Equal(10, only.Quantity);
+    }
+
+    [Fact]
+    public async Task SearchMedicinesAsync_IncludesCost_ForAnAdminCaller()
+    {
+        using var context = CreateInMemoryDbContext();
+        context.Medicines.Add(new Medicine
+        {
+            Id = 1,
+            Name = "Aspirin",
+            Price = 20m,
+            Quantity = 10,
+            CostPrice = 12.34m
+        });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+
+        var results = await service.SearchMedicinesAsync("Aspirin", includeHidden: true, includeCost: true);
+
+        var only = Assert.Single(results);
+        Assert.Equal(12.34m, only.CostPrice);
+        Assert.NotNull(only.MarkupPercent);
+    }
+
+    [Fact]
+    public async Task SearchMedicinesAsync_StillHidesHiddenMedicines_WhenNotIncluded()
+    {
+        // Guards the other half of the signature while it is being changed: a hidden
+        // medicine must stay out of a non-admin's search results.
+        using var context = CreateInMemoryDbContext();
+        context.Medicines.Add(new Medicine { Id = 1, Name = "Visible", Price = 5m, Quantity = 1 });
+        context.Medicines.Add(new Medicine { Id = 2, Name = "Vanished", Price = 5m, Quantity = 1, IsHidden = true });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+
+        var results = await service.SearchMedicinesAsync("V", includeHidden: false);
+
+        Assert.Equal(new[] { "Visible" }, results.Select(m => m.Name).ToArray());
     }
 }

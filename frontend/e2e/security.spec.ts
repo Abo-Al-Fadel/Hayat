@@ -453,8 +453,16 @@ test.describe("Information disclosure", () => {
     const asAdmin = await request.get(`${API_BASE}/api/Medicine/${medicineId}`, { headers: admin });
     expect((await asAdmin.json()).costPrice, "admin should see the recorded cost").toBeGreaterThan(0);
 
-    // The pharmacist must not, by field or by value, on either endpoint.
-    for (const path of [`/api/Medicine`, `/api/Medicine/${medicineId}`]) {
+    // The pharmacist must not, by field or by value, on any catalogue read.
+    //
+    // /search is listed because it was the one that leaked: it returned the Medicine
+    // entity instead of the DTO, so CostPrice went out unconditionally while the two
+    // endpoints either side of it were correctly gated.
+    for (const path of [
+      `/api/Medicine`,
+      `/api/Medicine/${medicineId}`,
+      `/api/Medicine/search?name=`,
+    ]) {
       const res = await request.get(`${API_BASE}${path}`, { headers: await auth("pharmacist") });
       const body = await res.text();
       expect(body, `${path} leaked the purchase price`).not.toContain("7.25");

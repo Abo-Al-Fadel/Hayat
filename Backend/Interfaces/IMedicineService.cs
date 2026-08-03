@@ -19,7 +19,12 @@ public interface IMedicineService
     Task<MedicineDto?> UpdateAsync(int id, UpdateMedicineDto dto);
     Task<MedicineDto> UpdateNameAsync(int id, string newName);
     Task<string> DeleteAsync(int id);
-    Task<List<Medicine>> SearchMedicinesAsync(string name, bool includeHidden = true);
+    /// <summary>
+    /// Searches the catalogue by name. Returns DTOs rather than entities so that
+    /// supplier cost is gated by <paramref name="includeCost"/> like every other
+    /// catalogue read - an entity serialises CostPrice unconditionally.
+    /// </summary>
+    Task<List<MedicineDto>> SearchMedicinesAsync(string name, bool includeHidden = true, bool includeCost = false);
     Task<List<MedicineDto>> GetByCategoryAsync(int categoryId, bool includeHidden = true, bool includeCost = false);
     Task<MedicineDto> ToggleVisibilityAsync(int id, bool isHidden);
 }
