@@ -361,6 +361,47 @@ test.describe("Nothing is clipped out of reach", () => {
   }
 });
 
+test.describe("Confirmation dialogs are usable on a phone", () => {
+  for (const theme of THEMES) {
+    test(`the status confirmation closes on Escape and has a thumb-sized close (${theme})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 360, height: 640 });
+      await clearSession(page);
+      await useTheme(page, theme);
+      await loginAs(page, "storage");
+      await page.waitForTimeout(1500);
+
+      // Advancing a supply order raises the shared ConfirmModal. Nothing is written:
+      // the dialog is dismissed, never confirmed.
+      const statusSelect = page.locator("select").first();
+      await expect(statusSelect).toBeVisible({ timeout: 15_000 });
+      const options = (await statusSelect.locator("option").allTextContents())
+        .map((o) => o.trim())
+        .filter((o) => /shipped|received|stored/i.test(o));
+      test.skip(options.length === 0, "no advanceable supply order in this database");
+
+      await statusSelect.selectOption({ label: options[0] });
+
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+      // It fits on the screen, and its close button is reachable by thumb.
+      const close = dialog.getByRole("button", { name: "Close", exact: true });
+      const closeBox = await close.boundingBox();
+      expect(closeBox!.width, "close button is too small to tap").toBeGreaterThanOrEqual(44);
+      expect(closeBox!.height, "close button is too small to tap").toBeGreaterThanOrEqual(44);
+      expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(361);
+      expect(closeBox!.y).toBeGreaterThanOrEqual(0);
+
+      // Escape dismisses it. The nav drawer has always done this; the dialog did not,
+      // so the two disagreed about the same key.
+      await page.keyboard.press("Escape");
+      await expect(dialog, "Escape must close the confirmation").toBeHidden({ timeout: 5_000 });
+    });
+  }
+});
+
 test.describe("Admin sections are not clipped on a phone", () => {
   for (const theme of THEMES) {
     test(`Users section keeps its row controls reachable (${theme})`, async ({ page }) => {

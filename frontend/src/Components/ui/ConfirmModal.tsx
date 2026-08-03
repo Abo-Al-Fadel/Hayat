@@ -1,5 +1,5 @@
 // src/Components/ui/ConfirmModal.tsx
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { X, Trash2 } from "lucide-react";
 import { Spinner } from "./Spinner";
 
@@ -28,6 +28,36 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Escape closes, and focus goes to the dialog and comes back afterwards.
+   *
+   * The overlay was already dismissible by clicking outside, but Escape did nothing -
+   * the drawer in Sidebar.tsx has handled it since it shipped, so the two behaved
+   * differently for no reason. Focus moves to the dialog itself rather than to a
+   * button: this is a destructive confirmation, and putting focus on "Yes, delete"
+   * turns a stray Enter into a deletion.
+   */
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Back to whatever opened the dialog, so keyboard users are not dumped at the
+      // top of the document.
+      previouslyFocused?.focus?.();
+    };
+  }, [isOpen, onCancel]);
+
   if (!isOpen) return null;
 
   return (
@@ -35,7 +65,9 @@ export function ConfirmModal({
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
 
       <div
-        className={`relative max-w-lg w-full rounded-lg shadow-2xl ${
+        ref={dialogRef}
+        tabIndex={-1}
+        className={`relative max-w-lg w-full rounded-lg shadow-2xl outline-none ${
           darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"
         }`}
         role="dialog"
@@ -43,9 +75,11 @@ export function ConfirmModal({
         aria-labelledby="confirm-title"
       >
         {/* Top-right close */}
+        {/* 24px of hit area (p-1 around a 16px icon) is a hard thing to hit with a
+            thumb. 44px up to sm, original sizing from sm up. */}
         <button
           onClick={onCancel}
-          className="absolute right-3 top-3 rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="absolute right-3 top-3 flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 rounded-full p-1 hover:bg-gray-100 dark:hover:bg-gray-800"
           aria-label="Close"
         >
           <X className={`h-4 w-4 ${darkMode ? "text-gray-200" : "text-gray-700"}`} />
