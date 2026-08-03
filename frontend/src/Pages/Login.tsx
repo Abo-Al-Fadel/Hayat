@@ -21,17 +21,22 @@ import Spinner from "../Components/Spinner/Spinner";
  * Published demo credentials, shown on this page so a visitor - a recruiter following a
  * CV link, say - can look around without being given a password.
  *
- * Compiled into the bundle, so treat them as public: anyone can read them out of the
- * JavaScript whether or not the panel is rendered. That is fine only because the
- * account behind them is the read-only HR role, which every write endpoint refuses.
- * DbInitializer hard-codes that role when it seeds the account, so this can never
- * become a writable login.
+ * Deliberately hard-coded rather than configured. They are compiled into the bundle
+ * either way, so anyone can read them out of the JavaScript; putting them behind a
+ * deploy-time variable would hide nothing and only means the panel silently vanishes on
+ * any host where someone forgot to set it. This way the demo works everywhere the site
+ * is deployed, with no per-host setup.
  *
- * Both variables must be set for the panel to appear - a deployment that wants no demo
- * account simply omits them.
+ * What makes publishing them acceptable is the account, not the storage: it holds the
+ * read-only HR role, which every write endpoint refuses. DbInitializer hard-codes that
+ * role when seeding, and RoleAuthorizationTests walks every action to prove HR appears
+ * in no write policy - so this can never become a login that changes anything.
+ *
+ * The environment variables remain as an override for a fork that wants different
+ * credentials, or none: set REACT_APP_DEMO_USER to an empty value to hide the panel.
  */
-const DEMO_USERNAME = process.env.REACT_APP_DEMO_USER ?? "";
-const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASS ?? "";
+const DEMO_USERNAME = process.env.REACT_APP_DEMO_USER || "Hr";
+const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASS || "Hr123456!";
 const HAS_DEMO_ACCOUNT = Boolean(DEMO_USERNAME && DEMO_PASSWORD);
 
 const Login: React.FC = () => {
