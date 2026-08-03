@@ -1140,62 +1140,72 @@ const PharmacistDashboard: React.FC = () => {
       <Toaster position="top-right" />
 
       {/* NAVBAR */}
-      <nav className={`flex items-center justify-between px-6 py-3 shadow-lg backdrop-blur-md ${mode.navbar}`}>
-        <div className="flex items-center gap-4">
+      {/* min-w-0 on the flex children below: without it a flex item refuses to shrink
+          past its content, which is how the fixed w-72 search box used to push the
+          entire right-hand cluster - notifications, theme, sign out - off a 360px
+          screen where #root's overflow-x:hidden then hid it completely. */}
+      <nav className={`flex items-center justify-between gap-2 px-3 sm:px-6 py-3 shadow-lg backdrop-blur-md ${mode.navbar}`}>
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
           {/* Logo - Click to navigate to landing page */}
-          <img 
-            src={darkMode ? logoDark : logoLight} 
-            alt="Logo" 
-            className="h-11 w-13 drop-shadow-[0_0_3px_white] cursor-pointer hover:opacity-80 transition-opacity"
+          <img
+            src={darkMode ? logoDark : logoLight}
+            alt="Logo"
+            className="h-11 w-13 shrink-0 drop-shadow-[0_0_3px_white] cursor-pointer hover:opacity-80 transition-opacity"
             onClick={() => navigate("/")}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") navigate("/"); }}
             aria-label="Go to home page"
           />
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 sm:flex-none">
             <input
               type="text"
               placeholder="Search medicines..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-72 rounded-full px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 ${mode.input}`}
+              className={`w-full sm:w-72 rounded-full px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 ${mode.input}`}
             />
             <Search className={`absolute left-3 top-2.5 h-4 w-4 ${darkMode ? "text-gray-400" : "text-gray-500"}`} />
           </div>
         </div>
 
-        <div className="flex items-center gap-4 relative">
+        {/* shrink-0 so this cluster keeps its width and the search box gives way
+            instead. The text labels collapse to their icons below sm - each control
+            keeps an aria-label, so the accessible name (and every test selector that
+            uses it) is unchanged. min-h-[44px] up to sm only: a comfortable touch
+            target on a phone, desktop sizing untouched. */}
+        <div className="flex items-center gap-1 sm:gap-4 relative shrink-0">
           <div
-            className="flex items-center gap-2 cursor-pointer hover:text-purple-400 transition select-none"
+            className="flex items-center gap-2 px-2 min-h-[44px] sm:min-h-0 sm:p-0 rounded-lg cursor-pointer hover:text-purple-400 transition select-none"
             onClick={openOrdersModal}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter") openOrdersModal(); }}
             aria-label="Open orders"
           >
-            <ClipboardList className="h-5 w-5" />
-            <span className="text-sm font-medium">Orders</span>
+            <ClipboardList className="h-5 w-5 shrink-0" />
+            <span className="hidden sm:inline text-sm font-medium">Orders</span>
           </div>
 
-          <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-full transition ${darkMode ? "hover:bg-yellow-600/20" : "hover:bg-gray-300/40"}`} aria-label="Toggle theme">
+          <button onClick={() => setDarkMode(!darkMode)} className={`flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 rounded-full transition ${darkMode ? "hover:bg-yellow-600/20" : "hover:bg-gray-300/40"}`} aria-label="Toggle theme">
             {darkMode ? <Sun className="h-5 w-5 text-yellow-400" /> : <Moon className="h-5 w-5 text-gray-700" />}
           </button>
 
           <div className="relative">
-            <button onClick={toggleNotifOpen} className="relative p-2 rounded-full hover:bg-gray-200/20">
+            <button onClick={toggleNotifOpen} className="relative flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-2 rounded-full hover:bg-gray-200/20" aria-label="Notifications">
               <Bell className="h-5 w-5" />
-              {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">{unreadCount}</span>}
+              {unreadCount > 0 && <span className="absolute top-1 right-1 sm:-top-1 sm:-right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">{unreadCount}</span>}
             </button>
           </div>
 
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 cursor-pointer transition-colors hover:text-red-500"
+            className="flex items-center gap-2 px-2 min-h-[44px] sm:min-h-0 sm:p-0 rounded-lg cursor-pointer transition-colors hover:text-red-500"
             title="Click to logout"
+            aria-label="Sign out"
           >
-            <User className="h-5 w-5" />
-            <span className="text-sm font-medium">Pharmacist</span>
+            <User className="h-5 w-5 shrink-0" />
+            <span className="hidden sm:inline text-sm font-medium">Pharmacist</span>
           </button>
         </div>
       </nav>

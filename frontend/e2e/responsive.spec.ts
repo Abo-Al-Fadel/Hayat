@@ -242,6 +242,34 @@ test.describe("Pharmacist point of sale fits a phone", () => {
     expect(await offscreenElements(page)).toEqual([]);
   });
 
+  test("the header keeps notifications, theme and sign out on screen", async ({ page }) => {
+    // The nav is one flex row and the search box was a fixed w-72. At 360px the logo
+    // plus that input already exceeded the row, so the entire right-hand cluster was
+    // laid out from x=477 to x=617 - past the edge, and hidden rather than scrollable
+    // because #root sets overflow-x: hidden globally. Nothing here reported an error;
+    // the controls simply were not there.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await clearSession(page);
+    await loginAs(page, "pharmacist");
+    await page.waitForTimeout(1200);
+
+    for (const label of ["Open orders", "Toggle theme", "Notifications", "Sign out"]) {
+      const control = page.getByRole("button", { name: label, exact: true }).first();
+      await expect(control, `${label} is missing`).toBeVisible();
+
+      const box = await control.boundingBox();
+      expect(box, `${label} has no box`).not.toBeNull();
+      expect(box!.x, `${label} starts off the left edge`).toBeGreaterThanOrEqual(0);
+      expect(
+        box!.x + box!.width,
+        `${label} runs past the right edge of a 360px screen`
+      ).toBeLessThanOrEqual(361);
+
+      // Comfortable to hit with a thumb.
+      expect(box!.height, `${label} is only ${box!.height}px tall`).toBeGreaterThanOrEqual(40);
+    }
+  });
+
   test("the orders modal scrolls vertically rather than spilling sideways", async ({ page }) => {
     await page.getByRole("button", { name: /orders/i }).first().click();
     await expect(page.getByRole("grid")).toBeVisible({ timeout: 15_000 });
