@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
 [Route("api/[controller]")]
+// Authentication only. Do NOT add a role list here: [Authorize] attributes are
+// cumulative, so a controller-level role silently narrows every action beneath it.
+// Each action states its own policy; this makes a forgotten one fail closed.
+[Authorize]
 public class SupplyOrderController : ControllerBase
 {
     private readonly ISupplyOrderService _service;

@@ -46,6 +46,39 @@ test.describe("Anonymous access", () => {
     });
   }
 
+  test("a medicine image is still served without a token", async ({ request }) => {
+    // The one deliberate exception, and the only endpoint whose whole point is to work
+    // from a plain <img src> that cannot send an Authorization header. Asserted at
+    // runtime, not just as an [AllowAnonymous] marker in a reflection test: the
+    // controller now carries a class-level [Authorize], and this proves AllowAnonymous
+    // still wins over it. Without this, breaking every image on the site is a silent
+    // change that no suite notices.
+    const admin = await auth("admin");
+
+    const form = new FormData();
+    form.append("Name", `E2E Image ${Date.now()}`);
+    form.append("Price", "4.50");
+    form.append("Quantity", "1");
+    // A one-pixel PNG, so the upload allowlist is exercised for real.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    form.append("Image", new Blob([png], { type: "image/png" }), "pixel.png");
+
+    const created = await request.post(`${API_BASE}/api/Medicine`, { headers: admin, multipart: form });
+    expect(created.status()).toBe(201);
+    const medicineId = (await created.json()).id;
+
+    // No Authorization header at all.
+    const anon = await request.get(`${API_BASE}/api/Medicine/${medicineId}/image`);
+    expect(anon.status(), "medicine images must stay anonymous").toBe(200);
+    expect(anon.headers()["content-type"]).toContain("image/png");
+    expect((await anon.body()).length).toBeGreaterThan(0);
+
+    await request.delete(`${API_BASE}/api/Medicine/${medicineId}`, { headers: admin });
+  });
+
   test("writing without a token is refused everywhere", async ({ request }) => {
     const writes: Array<[string, Record<string, unknown>]> = [
       ["/api/Categories", { name: "anon" }],

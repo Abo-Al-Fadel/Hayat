@@ -152,6 +152,33 @@ public class RoleAuthorizationTests
     }
 
     [Fact]
+    public void EveryControllerCarriesABareAuthorize()
+    {
+        // The stated convention: a bare [Authorize] on the controller for
+        // authentication, and each action declaring its own role policy on top. The
+        // bare attribute is what makes a forgotten action fail closed - without it a
+        // new action with no attribute is reachable by anyone, signed in or not.
+        //
+        // Three controllers had drifted off it (Medicine, Order, SupplyOrder). Nothing
+        // was reachable that should not have been, because every action there did carry
+        // its own policy - but the safety net under them was missing.
+        //
+        // AuthController is the exception and stays out: it exists to be reached without
+        // a token.
+        var missing = Controllers
+            .Where(c => c.Name != "AuthController")
+            .Where(c => c.GetCustomAttributes<AuthorizeAttribute>().All(a => !string.IsNullOrWhiteSpace(a.Roles)))
+            .Select(c => c.Name)
+            .OrderBy(n => n)
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            "these controllers carry no class-level [Authorize], so an action added " +
+            "without its own attribute would be publicly reachable:\n  " +
+            string.Join("\n  ", missing));
+    }
+
+    [Fact]
     public void EveryEndpointIsEitherAuthorizedOrDeliberatelyAnonymous()
     {
         var unprotected = Endpoints()

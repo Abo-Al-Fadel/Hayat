@@ -5,6 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
 [Route("api/[controller]")]
+// Authentication only. Do NOT add a role list here: [Authorize] attributes are
+// cumulative, so a controller-level role silently narrows every action beneath it.
+// Each action states its own policy; this makes a forgotten one fail closed.
+//
+// GetImage stays anonymous: [AllowAnonymous] on an action wins over this regardless
+// of level, which is what keeps <img src> working without an Authorization header.
+[Authorize]
 public class MedicineController : ControllerBase
 {
     private readonly IMedicineService _medicineService;
