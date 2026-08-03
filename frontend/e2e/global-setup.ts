@@ -73,6 +73,81 @@ export default async function globalSetup() {
     if (!res.ok) throw new Error(`Failed to seed medicine: ${res.status} ${await res.text()}`);
   }
 
+  // A supplier and one supply order sitting in the Storage Manager's queue.
+  //
+  // Without this the storage dashboard is empty on a fresh database, and every test
+  // that looks at a supply order row - the responsive layout checks in particular -
+  // finds the "No pending supply orders" placeholder instead. That passed locally for
+  // a long time purely because a development database accumulates orders from earlier
+  // runs; CI builds its database from nothing on every push, so it did not.
+  //
+  // Idempotent like the rest of this file: if the queue already has something in it,
+  // nothing is created.
+  const storageQueue = await fetch(`${API_BASE}/api/SupplyOrder/storage-manager`, {
+    headers: authed(),
+  });
+  const queued: unknown[] = storageQueue.ok ? await storageQueue.json() : [];
+
+  if (queued.length === 0) {
+    const suppliersRes = await fetch(`${API_BASE}/api/Supplier`, { headers: authed() });
+    const suppliers: Array<{ id: number; name: string }> = suppliersRes.ok
+      ? await suppliersRes.json()
+      : [];
+
+    let supplierId = suppliers.find((s) => s.name === "E2E Supplier")?.id ?? suppliers[0]?.id;
+
+    if (!supplierId) {
+      const created = await fetch(`${API_BASE}/api/Supplier`, {
+        method: "POST",
+        headers: authed({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          name: "E2E Supplier",
+          phone: "0123456789",
+          email: "e2e-supplier@example.test",
+        }),
+      });
+      if (!created.ok) {
+        throw new Error(`Failed to seed supplier: ${created.status} ${await created.text()}`);
+      }
+      supplierId = (await created.json()).id;
+    }
+
+    const medsRes = await fetch(`${API_BASE}/api/Medicine`, { headers: authed() });
+    const meds: Array<{ id: number; name: string }> = medsRes.ok ? await medsRes.json() : [];
+    const medicineId = meds.find((m) => m.name === "E2E Painkiller")?.id ?? meds[0]?.id;
+
+    if (!medicineId) throw new Error("No medicine to put on a seeded supply order.");
+
+    const orderRes = await fetch(`${API_BASE}/api/SupplyOrder`, {
+      method: "POST",
+      headers: authed({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        supplierId,
+        notes: "e2e-seed",
+        items: [{ medicineId, quantity: 20, unitPrice: 4.5 }],
+      }),
+    });
+    if (!orderRes.ok) {
+      throw new Error(`Failed to seed supply order: ${orderRes.status} ${await orderRes.text()}`);
+    }
+    const orderId = (await orderRes.json()).id;
+
+    // Created -> Approved -> Ordered. Both are Admin transitions, and "Ordered" is the
+    // first state GetOrdersForStorageManagerAsync returns, so this is the earliest
+    // point the order shows up for the Storage Manager - and it is still advanceable,
+    // which the status-confirmation tests need.
+    for (const status of ["Approved", "Ordered"]) {
+      const res = await fetch(`${API_BASE}/api/SupplyOrder/${orderId}/status`, {
+        method: "PATCH",
+        headers: authed({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to advance seeded order to ${status}: ${res.status} ${await res.text()}`);
+      }
+    }
+  }
+
   // Verify every account can actually authenticate before the suite starts.
   for (const account of [...Object.values(ACCOUNTS), DEMO_ACCOUNT]) {
     await apiLogin(account.username, account.password);
