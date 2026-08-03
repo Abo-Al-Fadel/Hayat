@@ -4,6 +4,7 @@ import "./Home.css";
 import leaf from "../Images/leaf.png";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
+import { landingPathForRole } from "../utils/roleLanding";
 import { PublicHeader } from "../Components/PublicHeader";
 
 const Home = () => {
@@ -17,12 +18,10 @@ const Home = () => {
       return;
     }
 
-    // Navigate based on role (case-insensitive comparison)
-    const role = user.role?.toLowerCase();
-    if (role === "admin") navigate("/admin");
-    else if (role === "pharmacist") navigate("/pharmacist");
-    else if (role === "storagemanager") navigate("/storage");
-    else navigate("/"); // fallback for unknown roles
+    // Shared with the login page so a new role cannot be added in one place and
+    // forgotten in the other. HR was: this branch had no case for it, so the button
+    // navigated to "/" - the page already on screen - and read as broken.
+    navigate(landingPathForRole(user.role));
   };
 
 

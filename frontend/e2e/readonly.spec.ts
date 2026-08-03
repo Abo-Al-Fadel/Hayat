@@ -287,6 +287,40 @@ test.describe("HR in the browser", () => {
     await expect(page.getByRole("grid")).toBeVisible({ timeout: 15_000 });
   });
 
+  /**
+   * A sweep rather than another named-button check.
+   *
+   * The tests above name each control they expect to be gone, so a control nobody
+   * thought to name stays invisible to them - which is exactly how "Add Category"
+   * survived. This walks every section and fails on any button or link whose own label
+   * announces that it changes something.
+   *
+   * Kept to unambiguous verbs, anchored at the start of the label. "Clear" (a local
+   * filter), "Close", "Today" and the pagination controls change nothing on the server
+   * and are deliberately not listed.
+   */
+  const WRITE_VERB = /^(add|create|new|delete|remove|edit|rename|save|update|submit|upload|approve|cancel order|checkout|place order)\b/i;
+
+  for (const section of ["Products", "Orders", "Stocks", "Users", "Statistics"]) {
+    test(`the ${section} section offers no control that writes`, async ({ page }) => {
+      await page.getByRole("button", { name: section, exact: true }).click();
+      await page.waitForTimeout(1500);
+
+      const offenders: string[] = [];
+      for (const role of ["button", "link"] as const) {
+        for (const name of await page.getByRole(role).allTextContents()) {
+          const label = name.trim();
+          if (WRITE_VERB.test(label)) offenders.push(`${role}: "${label}"`);
+        }
+      }
+
+      expect(
+        offenders,
+        `${section} offers a read-only observer these controls:\n  ${offenders.join("\n  ")}`
+      ).toEqual([]);
+    });
+  }
+
   test("can reach the other dashboards, and they are read-only too", async ({ page }) => {
     // HR is the one role that is not kept out of these. It is allowed to look at all
     // three - the guarantee is that none of them offers it a control.
@@ -327,6 +361,15 @@ test.describe("The HR view picker", () => {
       await page.getByRole("link", { name: new RegExp(`^${label}`) }).click();
       await expect(page).toHaveURL(url, { timeout: 15_000 });
     }
+  });
+
+  test("Get Started on the homepage reaches the picker", async ({ page }) => {
+    // The homepage kept its own copy of the role-to-page mapping and never learned
+    // about HR, so this button navigated to "/" - the page already on screen - and
+    // looked broken.
+    await page.goto("/");
+    await page.getByRole("button", { name: /get started/i }).click();
+    await expect(page).toHaveURL(/\/hr$/, { timeout: 15_000 });
   });
 
   test("every dashboard offers a way back to the picker", async ({ page }) => {

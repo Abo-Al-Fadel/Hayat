@@ -1168,6 +1168,8 @@ export default function AdminDashboard() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* showSaveUndo excludes a read-only viewer: it has no editable field, so there
+            is nothing to save or undo, and Save would fire writes the server refuses. */}
         <DashboardHeader
           title={getPageTitle()}
           darkMode={darkMode}
@@ -1177,7 +1179,7 @@ export default function AdminDashboard() {
           searchPlaceholder="Search medicines..."
           searchValue={searchTerm}
           onSearchChange={setSearchTerm}
-          showSaveUndo={activePage === "products"}
+          showSaveUndo={activePage === "products" && !readOnly}
           isDirty={isDirty}
           saving={saving}
           onSave={handleSaveAll}
@@ -1350,17 +1352,23 @@ export default function AdminDashboard() {
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={openCreateCategoryModal}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Category
-                  </button>
+                  {!readOnly && (
+                    <button
+                      onClick={openCreateCategoryModal}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Category
+                    </button>
+                  )}
                 </div>
                 <div className="p-4">
                   {categories.length === 0 ? (
-                    <div className="text-center text-gray-500 py-4">No categories yet. Create your first category!</div>
+                    <div className="text-center text-gray-500 py-4">
+                      {readOnly
+                        ? "No categories yet."
+                        : "No categories yet. Create your first category!"}
+                    </div>
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       {categories.map((cat) => {

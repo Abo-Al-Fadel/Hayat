@@ -14,32 +14,8 @@ import { ArrowLeft } from "lucide-react";
 import hayat from "../Images/HL.png";
 import "./Login.css";
 import { useAuth } from "../Context/AuthContext";
+import { landingPathForRole } from "../utils/roleLanding";
 import Spinner from "../Components/Spinner/Spinner";
-
-/**
- * Where a role lands after signing in.
- *
- * One function because this used to be written out twice - once for a fresh sign-in and
- * once for restoring an existing session - and the two drifted apart.
- *
- * HR gets the view picker rather than a dashboard: it is read-only across all three, so
- * it chooses which to look at. See Pages/HrHome.
- */
-export const landingPathForRole = (role: string): string => {
-  switch (role.trim().toLowerCase()) {
-    case "admin":
-      return "/admin";
-    case "hr":
-      return "/hr";
-    case "pharmacist":
-      return "/pharmacist";
-    case "storagemanager":
-    case "storage manager":
-      return "/storage";
-    default:
-      return "/";
-  }
-};
 
 const Login: React.FC = () => {
   const { login, isAuthenticated, user, loading: authLoading } = useAuth();
