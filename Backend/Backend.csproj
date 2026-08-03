@@ -10,6 +10,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The seeding helpers are internal: they are start-up plumbing, not API surface.
+         The test project drives them directly because DbInitializer.InitializeAsync
+         also applies migrations, which the in-memory provider cannot do. -->
+    <InternalsVisibleTo Include="Backend.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AutoMapper" Version="15.1.1" />
     
 

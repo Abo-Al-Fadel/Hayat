@@ -10,12 +10,29 @@
  */
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation, Link, useSearchParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye } from "lucide-react";
 import hayat from "../Images/HL.png";
 import "./Login.css";
 import { useAuth } from "../Context/AuthContext";
 import { landingPathForRole } from "../utils/roleLanding";
 import Spinner from "../Components/Spinner/Spinner";
+
+/**
+ * Published demo credentials, shown on this page so a visitor - a recruiter following a
+ * CV link, say - can look around without being given a password.
+ *
+ * Compiled into the bundle, so treat them as public: anyone can read them out of the
+ * JavaScript whether or not the panel is rendered. That is fine only because the
+ * account behind them is the read-only HR role, which every write endpoint refuses.
+ * DbInitializer hard-codes that role when it seeds the account, so this can never
+ * become a writable login.
+ *
+ * Both variables must be set for the panel to appear - a deployment that wants no demo
+ * account simply omits them.
+ */
+const DEMO_USERNAME = process.env.REACT_APP_DEMO_USER ?? "";
+const DEMO_PASSWORD = process.env.REACT_APP_DEMO_PASS ?? "";
+const HAS_DEMO_ACCOUNT = Boolean(DEMO_USERNAME && DEMO_PASSWORD);
 
 const Login: React.FC = () => {
   const { login, isAuthenticated, user, loading: authLoading } = useAuth();
@@ -60,13 +77,13 @@ const Login: React.FC = () => {
     }
   }, [isAuthenticated, user, authLoading, navigate]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /** Shared by the form and the demo button so both behave identically. */
+  const signIn = async (name: string, secret: string) => {
     setError("");
     setLoading(true);
 
     try {
-      const loggedUser = await login(username.trim(), password);
+      const loggedUser = await login(name.trim(), secret);
 
       // Single redirect with replace
       navigate(landingPathForRole(loggedUser.role), { replace: true });
@@ -77,6 +94,19 @@ const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await signIn(username, password);
+  };
+
+  // Fills the form as well as signing in, so it is obvious what was used and the
+  // visitor can repeat it by hand.
+  const handleDemoSignIn = async () => {
+    setUsername(DEMO_USERNAME);
+    setPassword(DEMO_PASSWORD);
+    await signIn(DEMO_USERNAME, DEMO_PASSWORD);
   };
 
   // Show spinner during initial auth check
@@ -155,6 +185,39 @@ const Login: React.FC = () => {
             {loading ? <Spinner className="w-5 h-5" /> : "Sign In"}
           </button>
         </form>
+
+        {/* Public demo account. Deliberately shows the credentials in plain text: they
+            are in the bundle regardless, and a visitor who prefers to type them in
+            should be able to. */}
+        {HAS_DEMO_ACCOUNT && (
+          <div className="mt-6 rounded-lg border border-white/20 bg-white/10 p-4">
+            <div className="flex items-start gap-2 text-white/90">
+              <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Just looking around?</p>
+                <p className="mt-0.5 text-xs text-white/70">
+                  Sign in to a view-only account that can open every page but change nothing.
+                </p>
+              </div>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-white/60">Username</dt>
+              <dd className="font-mono text-white break-all">{DEMO_USERNAME}</dd>
+              <dt className="text-white/60">Password</dt>
+              <dd className="font-mono text-white break-all">{DEMO_PASSWORD}</dd>
+            </dl>
+
+            <button
+              type="button"
+              onClick={handleDemoSignIn}
+              disabled={loading}
+              className="mt-3 w-full rounded-lg border border-white/30 bg-white/10 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-60"
+            >
+              Open the read-only demo
+            </button>
+          </div>
+        )}
 
         {/* Password reset is not implemented (no /forgot-password route and no
             server endpoint), so we tell users what to do instead of linking to a

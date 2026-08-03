@@ -22,7 +22,9 @@ export async function loginAs(page: Page, role: RoleKey) {
 
   await page.getByPlaceholder("Enter your username").fill(account.username);
   await page.locator('input[type="password"]').fill(account.password);
-  await page.getByRole("button", { name: "Sign In" }).click();
+  // Exact: the login page also carries a demo button, and a substring match would
+  // find both.
+  await page.getByRole("button", { name: "Sign In", exact: true }).click();
 
   await expect(page).toHaveURL(new RegExp(`${account.landing}$`), { timeout: 20_000 });
 }

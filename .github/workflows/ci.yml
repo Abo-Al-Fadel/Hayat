@@ -208,6 +208,10 @@ jobs:
         working-directory: frontend
         env:
           REACT_APP_API_BASE: "http://localhost:5057"
+          # The login page only renders the demo panel when both are set, so the build
+          # must carry them or the tests covering it have nothing to find.
+          REACT_APP_DEMO_USER: "Hr"
+          REACT_APP_DEMO_PASS: "Hr123456!"
         run: |
           set -euo pipefail
           npm ci

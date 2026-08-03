@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from "@playwright/test";
-import { ACCOUNTS, API_BASE, apiLogin } from "./accounts";
+import { ACCOUNTS, API_BASE, DEMO_ACCOUNT, apiLogin } from "./accounts";
 import { loginAs, clearSession, trackPageErrors } from "./helpers";
 
 /**
@@ -363,6 +363,14 @@ test.describe("The HR view picker", () => {
     }
   });
 
+  test("the Products button in the header reaches the picker", async ({ page }) => {
+    // The public header kept its own copy of the role mapping and, like the homepage's,
+    // had no case for HR - so this button navigated to "/" and did nothing.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Products", exact: true }).click();
+    await expect(page).toHaveURL(/\/hr$/, { timeout: 15_000 });
+  });
+
   test("Get Started on the homepage reaches the picker", async ({ page }) => {
     // The homepage kept its own copy of the role-to-page mapping and never learned
     // about HR, so this button navigated to "/" - the page already on screen - and
@@ -424,6 +432,73 @@ test.describe("The HR role is offered in the UI", () => {
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
       await expect(rowSelects.nth(i).locator('option[value="HR"]')).toHaveCount(1);
+    }
+  });
+});
+
+/**
+ * The published demo account.
+ *
+ * Its credentials are printed on the login page so a visitor following a CV link can
+ * look around. That is safe only for as long as the account cannot write, so these
+ * check both halves: that the advertised login works, and that what it buys you is
+ * strictly read-only.
+ */
+test.describe("The public demo account", () => {
+  test("the login page advertises it in plain text", async ({ page }) => {
+    await page.goto("/login");
+
+    await expect(page.getByText(DEMO_ACCOUNT.username, { exact: true })).toBeVisible();
+    await expect(page.getByText(DEMO_ACCOUNT.password, { exact: true })).toBeVisible();
+    await expect(page.getByText(/view-only account/i)).toBeVisible();
+  });
+
+  test("the one-click button signs in and lands on the picker", async ({ page }) => {
+    await clearSession(page);
+    await page.goto("/login");
+
+    await page.getByRole("button", { name: /read-only demo/i }).click();
+    await expect(page).toHaveURL(/\/hr$/, { timeout: 20_000 });
+    await expect(page.getByRole("heading", { name: /choose a view/i })).toBeVisible();
+  });
+
+  test("the advertised credentials also work typed in by hand", async ({ page }) => {
+    // A visitor who ignores the button and types what is on screen must get the same
+    // result, so the panel can never advertise something that does not work.
+    await clearSession(page);
+    await page.goto("/login");
+
+    await page.getByPlaceholder("Enter your username").fill(DEMO_ACCOUNT.username);
+    await page.locator('input[type="password"]').fill(DEMO_ACCOUNT.password);
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/hr$/, { timeout: 20_000 });
+  });
+
+  test("it holds the read-only role and nothing more", async () => {
+    const token = await apiLogin(DEMO_ACCOUNT.username, DEMO_ACCOUNT.password);
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    const roles = [payload.role ?? payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]].flat();
+
+    expect(roles).toEqual(["HR"]);
+  });
+
+  test("it cannot change anything, whatever the UI shows", async ({ request }) => {
+    // The published password is only harmless because of this.
+    const headers = { Authorization: `Bearer ${await apiLogin(DEMO_ACCOUNT.username, DEMO_ACCOUNT.password)}` };
+
+    const attempts = await Promise.all([
+      request.post(`${API_BASE}/api/Categories`, { headers, data: { name: "demo-should-fail" } }),
+      request.post(`${API_BASE}/api/Supplier`, { headers, data: { name: "demo-should-fail" } }),
+      request.post(`${API_BASE}/api/Users/create`, {
+        headers,
+        data: { userName: "demoEscalation", email: "x@y.test", password: "Str0ng#Pass1", role: "Admin" },
+      }),
+      request.post(`${API_BASE}/api/Order`, { headers, data: { items: [] } }),
+    ]);
+
+    for (const res of attempts) {
+      expect(res.status(), `${res.url()} must be refused`).toBe(403);
     }
   });
 });

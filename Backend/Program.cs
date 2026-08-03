@@ -28,9 +28,37 @@ var jwtSettings = builder.Configuration
 // token for any role. Outside Development, refuse to start on a key that is missing,
 // short, or one of the values that has ever been committed to this repository.
 // Failing at start-up is loud; a weak key in production is silent.
-ValidateSigningKey(jwtSettings.Key, builder.Environment.IsDevelopment());
+ValidateSigningKey(
+    jwtSettings.Key,
+    builder.Environment.IsDevelopment(),
+    DescribeConfigSource(builder.Configuration, "JwtSettings:Key"));
 
-static void ValidateSigningKey(string? key, bool isDevelopment)
+/// <summary>
+/// Names the configuration provider a value actually came from.
+///
+/// Telling someone "your key is wrong" is not much help when they have already fixed it
+/// in the place they know about: an environment variable silently outranks user-secrets,
+/// and a shell started before the variable was removed keeps its own copy, so the fix
+/// appears to do nothing. Reporting the winning provider turns that from a guessing game
+/// into a fact.
+///
+/// Providers are consulted in order and the last one holding the key wins, so this walks
+/// them backwards and reports the first hit.
+/// </summary>
+static string DescribeConfigSource(IConfiguration configuration, string key)
+{
+    if (configuration is not IConfigurationRoot root) return "unknown source";
+
+    foreach (var provider in root.Providers.Reverse())
+    {
+        if (provider.TryGet(key, out _))
+            return provider.GetType().Name;
+    }
+
+    return "no provider";
+}
+
+static void ValidateSigningKey(string? key, bool isDevelopment, string source)
 {
     // Anything ever exposed in source control or in a public artifact. Rotating away
     // from these is mandatory - see DEPLOYMENT.md.
@@ -46,15 +74,16 @@ static void ValidateSigningKey(string? key, bool isDevelopment)
 
     if (burned.Contains(key))
         throw new InvalidOperationException(
-            "JwtSettings:Key is a known-compromised value from this repository's history. " +
-            "Generate a new one. If you have already replaced it in user-secrets and still " +
-            "see this, an environment variable named JwtSettings__Key is overriding them - " +
-            "environment variables win. Check all three scopes:\n" +
-            "  [Environment]::GetEnvironmentVariable('JwtSettings__Key','User')\n" +
-            "  [Environment]::GetEnvironmentVariable('JwtSettings__Key','Machine')\n" +
-            "  $env:JwtSettings__Key\n" +
+            $"JwtSettings:Key is a known-compromised value from this repository's history, " +
+            $"and it is coming from: {source}.\n" +
+            "If that says EnvironmentVariablesConfigurationProvider, the variable is winning " +
+            "over user-secrets - environment variables outrank them. Clear it in every scope:\n" +
+            "  [Environment]::SetEnvironmentVariable('JwtSettings__Key', $null, 'User')\n" +
+            "  [Environment]::SetEnvironmentVariable('JwtSettings__Key', $null, 'Machine')\n" +
+            "  $env:JwtSettings__Key = $null\n" +
             "A shell started before the variable was removed keeps its own stale copy in " +
-            "memory, so restart the terminal (and your IDE) after clearing it.");
+            "memory, so close every terminal and your IDE afterwards - reopening a tab is not " +
+            "enough, the parent process passes the old value to each new child.");
 
     if (isDevelopment) return;
 

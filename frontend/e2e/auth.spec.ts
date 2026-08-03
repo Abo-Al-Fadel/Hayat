@@ -17,7 +17,7 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.getByPlaceholder("Enter your username").fill(ACCOUNTS.admin.username);
     await page.locator('input[type="password"]').fill("definitely-not-the-password");
-    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
 
     const error = page.locator("p.text-red-400");
     await expect(error).toBeVisible();
@@ -29,7 +29,7 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.getByPlaceholder("Enter your username").fill("no-such-user-at-all");
     await page.locator('input[type="password"]').fill("whatever");
-    await page.getByRole("button", { name: "Sign In" }).click();
+    await page.getByRole("button", { name: "Sign In", exact: true }).click();
 
     await expect(page.locator("p.text-red-400")).toContainText(/invalid username or password/i);
   });
@@ -78,7 +78,7 @@ test.describe("Authentication", () => {
   test("login page renders without console errors", async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto("/login");
-    await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign In", exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

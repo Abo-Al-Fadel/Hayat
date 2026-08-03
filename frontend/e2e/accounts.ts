@@ -9,6 +9,21 @@ export const ACCOUNTS = {
   hr: { username: "e2ehr", password: "E2eHrView#2026x", role: "HR", landing: "/hr" },
 } as const;
 
+/**
+ * The published demo account advertised on the login page.
+ *
+ * Kept out of ACCOUNTS so the role-isolation sweeps do not treat it as a fifth role -
+ * it is the same HR role, reached a different way. global-setup creates it, and the
+ * front-end build must be given the matching REACT_APP_DEMO_* values for the panel to
+ * appear at all.
+ */
+export const DEMO_ACCOUNT = {
+  username: process.env.REACT_APP_DEMO_USER ?? "Hr",
+  password: process.env.REACT_APP_DEMO_PASS ?? "Hr123456!",
+  role: "HR",
+  landing: "/hr",
+} as const;
+
 export type RoleKey = keyof typeof ACCOUNTS;
 
 /** All landing pages, used to assert a role cannot reach another role's dashboard. */

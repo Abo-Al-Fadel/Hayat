@@ -1,4 +1,4 @@
-import { ACCOUNTS, API_BASE, apiLogin } from "./accounts";
+import { ACCOUNTS, API_BASE, DEMO_ACCOUNT, apiLogin } from "./accounts";
 
 /**
  * Ensures the three role accounts and a little reference data exist before the
@@ -26,8 +26,11 @@ export default async function globalSetup() {
     ...extra,
   });
 
-  // Role accounts. A duplicate username/email comes back 400, which is fine.
-  for (const account of Object.values(ACCOUNTS)) {
+  // Role accounts, plus the published demo account the login page advertises. In
+  // production the API seeds that one itself from DemoAccount:*; here it is created the
+  // same way as the rest so the suite does not depend on how the API was launched.
+  // A duplicate username/email comes back 400, which is fine.
+  for (const account of [...Object.values(ACCOUNTS), DEMO_ACCOUNT]) {
     if (account.username === bootstrapUser) continue;
     const res = await fetch(`${API_BASE}/api/Users/create`, {
       method: "POST",
@@ -71,7 +74,7 @@ export default async function globalSetup() {
   }
 
   // Verify every account can actually authenticate before the suite starts.
-  for (const account of Object.values(ACCOUNTS)) {
+  for (const account of [...Object.values(ACCOUNTS), DEMO_ACCOUNT]) {
     await apiLogin(account.username, account.password);
   }
 }

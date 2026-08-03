@@ -37,6 +37,66 @@ public static class DbInitializer
         // Admin set below 30 on the next restart.
 
         await SeedBootstrapAdminAsync(scope.ServiceProvider);
+        await SeedDemoObserverAsync(scope.ServiceProvider);
+    }
+
+    /// <summary>
+    /// Creates the public demo account: a portfolio visitor signs in with published
+    /// credentials and looks around without an admin handing out a password.
+    ///
+    /// Two properties make publishing those credentials defensible, and both are
+    /// enforced here rather than left to configuration:
+    ///
+    /// 1. The role is hard-coded to HR. It is not a setting, so this can never seed an
+    ///    account that writes. HR is refused by every write endpoint on the server, and
+    ///    RoleAuthorizationTests walks each one to prove it.
+    /// 2. Nothing happens unless DemoAccount:UserName and :Password are both configured.
+    ///    There are no built-in credentials, so a fork or a private deployment that does
+    ///    not set them has no demo account at all.
+    ///
+    /// Idempotent: an existing user of that name is left exactly as it is, so this never
+    /// resets a password or re-grants a role someone deliberately changed.
+    /// </summary>
+    internal static async Task SeedDemoObserverAsync(IServiceProvider services)
+    {
+        var config = services.GetRequiredService<IConfiguration>();
+        var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("DbInitializer");
+
+        var userName = config["DemoAccount:UserName"];
+        var password = config["DemoAccount:Password"];
+        var email = config["DemoAccount:Email"];
+
+        if (string.IsNullOrWhiteSpace(userName) || string.IsNullOrWhiteSpace(password))
+            return;
+
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+
+        if (await userManager.FindByNameAsync(userName) is not null)
+        {
+            logger.LogInformation("[DbInit] Demo account '{UserName}' already exists.", userName);
+            return;
+        }
+
+        var demo = new AppUser
+        {
+            UserName = userName,
+            Email = string.IsNullOrWhiteSpace(email) ? $"{userName}@demo.local" : email,
+            EmailConfirmed = true
+        };
+
+        var result = await userManager.CreateAsync(demo, password);
+        if (!result.Succeeded)
+        {
+            logger.LogError("[DbInit] Demo account creation failed: {Errors}",
+                string.Join("; ", result.Errors.Select(e => e.Description)));
+            return;
+        }
+
+        // Never anything but HR. See the note above.
+        await userManager.AddToRoleAsync(demo, nameof(AppRole.HR));
+        logger.LogInformation(
+            "[DbInit] Demo account '{UserName}' created as read-only {Role}.",
+            userName, nameof(AppRole.HR));
     }
 
     /// <summary>

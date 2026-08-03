@@ -3,6 +3,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { FaSignOutAlt, FaUserCircle as FaUserCircleRaw } from "react-icons/fa";
 import { useAuth } from "../Context/AuthContext";
+import { landingPathForRole } from "../utils/roleLanding";
 import hayat from "../Images/HTL.png";
 
 export const FaUserCircle = (props: React.SVGProps<SVGSVGElement>) => FaUserCircleRaw(props);
@@ -28,16 +29,16 @@ export function PublicHeader({ active }: PublicHeaderProps) {
 
   // "Products" means "take me into the app": to the right dashboard when signed in,
   // otherwise to sign-in first.
+  //
+  // Shares landingPathForRole with the login page and the homepage. This was the fourth
+  // hand-written copy of that mapping and, like the homepage's, it had no case for HR -
+  // so the button navigated to "/" and did nothing at all for that role.
   const goToApp = () => {
     if (!user) {
       navigate("/login", { state: { redirectTo: true } });
       return;
     }
-    const role = user.role?.toLowerCase();
-    if (role === "admin") navigate("/admin");
-    else if (role === "pharmacist") navigate("/pharmacist");
-    else if (role === "storagemanager") navigate("/storage");
-    else navigate("/");
+    navigate(landingPathForRole(user.role));
   };
 
   const handleLogout = () => {

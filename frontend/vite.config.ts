@@ -13,6 +13,17 @@ import react from "@vitejs/plugin-react";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ["VITE_", "REACT_APP_"]);
 
+  /**
+   * .env file first, then the real environment.
+   *
+   * CI passes these as ordinary environment variables rather than writing a .env, and
+   * a build that silently baked in an empty API base produced a bundle whose every
+   * request went to the web host instead of the API - a wall of 404s that looks like a
+   * broken login rather than a misconfigured build. Reading both sources removes the
+   * question of which one loadEnv happened to pick up.
+   */
+  const setting = (key: string) => env[key] ?? process.env[key] ?? "";
+
   return {
     plugins: [react()],
 
@@ -20,8 +31,15 @@ export default defineConfig(({ mode }) => {
     envPrefix: ["VITE_", "REACT_APP_"],
 
     define: {
-      "process.env.REACT_APP_API_BASE": JSON.stringify(env.REACT_APP_API_BASE ?? ""),
+      "process.env.REACT_APP_API_BASE": JSON.stringify(setting("REACT_APP_API_BASE")),
       "process.env.NODE_ENV": JSON.stringify(mode),
+
+      // Public demo credentials shown on the login page. Both must be set for the
+      // panel to appear, so a deployment that does not want a demo simply omits them.
+      // These are compiled into the bundle and are meant to be readable by anyone -
+      // they only ever name the read-only HR account. See Pages/Login.
+      "process.env.REACT_APP_DEMO_USER": JSON.stringify(setting("REACT_APP_DEMO_USER")),
+      "process.env.REACT_APP_DEMO_PASS": JSON.stringify(setting("REACT_APP_DEMO_PASS")),
     },
 
     server: {
