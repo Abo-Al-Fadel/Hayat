@@ -361,6 +361,31 @@ test.describe("Nothing is clipped out of reach", () => {
   }
 });
 
+test.describe("Tap targets on a phone", () => {
+  test("the category chip controls are big enough to hit", async ({ page }) => {
+    // Edit and delete sat side by side at 22px square - under WCAG 2.2 SC 2.5.8's
+    // 24x24 floor, and next to each other with one of them destructive.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await clearSession(page);
+    await loginAs(page, "admin");
+    await page.waitForTimeout(1500);
+
+    const edit = page.getByRole("button", { name: "Edit category" }).first();
+    await expect(edit).toBeVisible({ timeout: 15_000 });
+
+    for (const control of [edit, page.locator('button[title^="Delete category"], button[title^="Cannot delete"]').first()]) {
+      if ((await control.count()) === 0) continue;
+      const box = await control.boundingBox();
+      expect(box!.width, `target is only ${box!.width}px wide`).toBeGreaterThanOrEqual(44);
+      expect(box!.height, `target is only ${box!.height}px tall`).toBeGreaterThanOrEqual(44);
+    }
+
+    // Widening them must not push the category row off the screen.
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+    expect(await clippedContent(page)).toEqual([]);
+  });
+});
+
 test.describe("Confirmation dialogs are usable on a phone", () => {
   for (const theme of THEMES) {
     test(`the status confirmation closes on Escape and has a thumb-sized close (${theme})`, async ({

@@ -1419,16 +1419,22 @@ export default function AdminDashboard() {
                               {productCount}
                             </span>
 {!readOnly && (<>
+                            {/* These were 22px square - a 14px icon with p-1 - which is
+                                under WCAG 2.2's 24x24 minimum (SC 2.5.8) and the smallest
+                                pair of targets in the app. They also sit next to each
+                                other, and one of them deletes, so a mis-tap on a phone
+                                was not a harmless one. 44px on touch, 26px from sm up
+                                where a pointer is precise; the icons are unchanged. */}
                             <button
                               onClick={() => openEditCategoryModal(cat)}
-                              className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
+                              className="flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-1.5 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors"
                               title="Edit category"
                             >
                               <Edit2 className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => openDeleteCategoryModal(cat.id, cat.name)}
-                              className={`p-1 rounded transition-colors ${
+                              className={`flex items-center justify-center min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 p-1.5 rounded transition-colors ${
                                 productCount > 0
                                   ? "text-gray-400 cursor-not-allowed"
                                   : "text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 dark:hover:text-red-400"
