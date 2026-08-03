@@ -688,7 +688,7 @@ export function SupplierPanel({
         title="Delete Supplier"
         message="Are you sure you want to delete this supplier?"
         itemName={deleteTarget?.name}
-        warningText="This will permanently remove the supplier. Any supply stocks associated with this supplier will be affected."
+        warningText="This will permanently remove the supplier. A supplier that supply orders still reference cannot be deleted - that history is what the cost and profit figures are calculated from."
         confirmButtonText="Delete Supplier"
         loading={deleting}
         darkMode={darkMode}

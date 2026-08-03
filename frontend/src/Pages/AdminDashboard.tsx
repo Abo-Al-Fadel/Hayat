@@ -877,9 +877,20 @@ export default function AdminDashboard() {
   }, []);
 
   const handleDeleteSupplier = useCallback(async (supplierId: number) => {
-    await deleteSupplier(supplierId);
-    setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
-    toast.success("Supplier deleted successfully");
+    try {
+      await deleteSupplier(supplierId);
+      setSuppliers((prev) => prev.filter((s) => s.id !== supplierId));
+      toast.success("Supplier deleted successfully");
+    } catch (err) {
+      // The server refuses to delete a supplier that supply orders still reference,
+      // because the cascade behind that FK would take the purchase history with it.
+      // Without this the rejection was an unhandled promise: the row stayed put, no
+      // toast appeared, and the button looked broken rather than declined.
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        "Could not delete the supplier. Please try again.";
+      toast.error(message);
+    }
   }, []);
 
   // ──────────────────────────────────────────────────────────────────────────

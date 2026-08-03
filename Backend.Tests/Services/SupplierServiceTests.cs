@@ -295,4 +295,65 @@ public class SupplierServiceTests
         // Assert
         Assert.False(success);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Deleting a supplier that supply orders still reference
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// SupplyOrder.SupplierId is a required FK created with
+    /// onDelete: ReferentialAction.Cascade, so removing a supplier took every supply
+    /// order placed with it - and their line items - down with it, silently. That is
+    /// the purchase history the weighted-average cost and the financial report are
+    /// derived from, and the API answered "Supplier deleted successfully".
+    ///
+    /// CategoryService already refuses to delete a category that medicines reference.
+    /// Suppliers now behave the same way.
+    /// </summary>
+    [Fact]
+    public async Task DeleteAsync_IsRefused_WhenSupplyOrdersStillReferenceTheSupplier()
+    {
+        using var context = CreateInMemoryContext();
+        var service = new SupplierService(context);
+
+        var supplierId = (await service.CreateAsync(new CreateSupplierDto { Name = "Referenced" })).Id;
+        var supplier = await context.Suppliers.FindAsync(supplierId);
+
+        context.SupplyOrders.Add(new SupplyOrder
+        {
+            SupplierId = supplierId,
+            Supplier = supplier!,
+            Status = SupplyOrderStatusEnum.Stored,
+            Items = new List<SupplyOrderItem>
+            {
+                new() { MedicineId = 1, Quantity = 10, UnitPrice = 7.25m }
+            }
+        });
+        await context.SaveChangesAsync();
+
+        var blocked = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.DeleteAsync(supplierId));
+
+        // The message has to name the obstacle - "cannot delete" alone leaves the admin
+        // guessing which of the two guards fired.
+        Assert.Contains("supply order", blocked.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Both the supplier and the history it explains are still there.
+        Assert.NotNull(await service.GetByIdAsync(supplierId));
+        Assert.Equal(1, await context.SupplyOrders.CountAsync());
+        Assert.Equal(1, await context.SupplyOrderItems.CountAsync());
+    }
+
+    [Fact]
+    public async Task DeleteAsync_StillRemovesASupplierNothingReferences()
+    {
+        // The guard must not turn every delete into a refusal.
+        using var context = CreateInMemoryContext();
+        var service = new SupplierService(context);
+
+        var supplierId = (await service.CreateAsync(new CreateSupplierDto { Name = "Unused" })).Id;
+
+        Assert.True(await service.DeleteAsync(supplierId));
+        Assert.Null(await service.GetByIdAsync(supplierId));
+    }
 }

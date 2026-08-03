@@ -42,11 +42,20 @@ public class SupplierController : ControllerBase
     [Authorize(Roles = Roles.CanManageSuppliers)]
     public async Task<IActionResult> Delete(int id)
     {
-        var deleted = await _service.DeleteAsync(id);
-        if (!deleted)
-            return NotFound("Supplier not found");
+        try
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted)
+                return NotFound("Supplier not found");
 
-        return Ok("Supplier deleted successfully");
+            return Ok("Supplier deleted successfully");
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Still referenced by supply orders. A refusal the admin can act on, not a
+            // 500 - and not the silent cascade this used to be.
+            return BadRequest(new { error = ex.Message });
+        }
     }
     [HttpGet]
     [Authorize(Roles = Roles.CanReadSuppliers)]

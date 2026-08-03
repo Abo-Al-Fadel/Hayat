@@ -477,6 +477,44 @@ test.describe("Information disclosure", () => {
   });
 });
 
+test.describe("Referential integrity", () => {
+  test("deleting a supplier does not silently destroy its purchase history", async ({ request }) => {
+    // SupplyOrder.SupplierId is a required FK created with ON DELETE CASCADE, so the
+    // delete used to succeed and take every supply order placed with that supplier -
+    // and their line items - with it, reporting "Supplier deleted successfully".
+    const admin = await auth("admin");
+
+    const created = await request.post(`${API_BASE}/api/Supplier`, {
+      headers: admin,
+      data: { name: `E2E Cascade ${Date.now()}`, phone: "0123456789", email: `c${Date.now()}@example.test` },
+    });
+    const supplierId = (await created.json()).id;
+
+    const meds = await request.get(`${API_BASE}/api/Medicine`, { headers: admin });
+    const medicineId = (await meds.json())[0].id;
+
+    const order = await request.post(`${API_BASE}/api/SupplyOrder`, {
+      headers: admin,
+      data: { supplierId, notes: "e2e-cascade", items: [{ medicineId, quantity: 4, unitPrice: 2.5 }] },
+    });
+    expect(order.ok()).toBeTruthy();
+    const orderId = (await order.json()).id;
+
+    // Refused, with a reason - not a 500, and not a success.
+    const attempt = await request.delete(`${API_BASE}/api/Supplier/${supplierId}`, { headers: admin });
+    expect(attempt.status()).toBe(400);
+    expect(JSON.stringify(await attempt.json())).toMatch(/supply order/i);
+
+    // Both the supplier and the order it explains are still there.
+    const supplier = await request.get(`${API_BASE}/api/Supplier/${supplierId}`, { headers: admin });
+    expect(supplier.status()).toBe(200);
+
+    const survivor = await request.get(`${API_BASE}/api/SupplyOrder/${orderId}`, { headers: admin });
+    expect(survivor.status()).toBe(200);
+    expect((await survivor.json()).items).toHaveLength(1);
+  });
+});
+
 test.describe("Cross-origin policy", () => {
   test("an unlisted origin is not granted credentialed access", async ({ request }) => {
     const res = await request.fetch(`${API_BASE}/api/Medicine`, {

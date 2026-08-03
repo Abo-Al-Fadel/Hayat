@@ -57,11 +57,31 @@ public class SupplierService : ISupplierService
         };
     }
 
+    /// <summary>
+    /// Removes a supplier that nothing references.
+    ///
+    /// SupplyOrder.SupplierId is a required FK declared with
+    /// onDelete: ReferentialAction.Cascade, so deleting a supplier used to take every
+    /// supply order placed with it - and every line item under those - with it, while
+    /// the API reported success. That history is not incidental: weighted-average cost,
+    /// gross profit and the whole financial report are computed from it, and once the
+    /// rows are gone there is nothing to recompute from.
+    ///
+    /// So the reference is checked first, exactly as CategoryService does for a category
+    /// that still has medicines. Refusing is recoverable; cascading is not.
+    /// </summary>
     public async Task<bool> DeleteAsync(int id)
     {
         var supplier = await _context.Suppliers.FindAsync(id);
         if (supplier == null)
             return false;
+
+        var supplyOrderCount = await _context.SupplyOrders.CountAsync(o => o.SupplierId == id);
+        if (supplyOrderCount > 0)
+            throw new InvalidOperationException(
+                $"'{supplier.Name}' is referenced by {supplyOrderCount} supply order(s). " +
+                "Deleting it would remove that purchase history, which the cost and profit " +
+                "figures are calculated from.");
 
         _context.Suppliers.Remove(supplier);
         await _context.SaveChangesAsync();
