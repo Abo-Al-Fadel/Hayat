@@ -477,6 +477,50 @@ test.describe("Information disclosure", () => {
   });
 });
 
+test.describe("Role assignment", () => {
+  test("an admin can move an existing user to the read-only HR role", async ({ request }) => {
+    // The admin dashboard offers "HR (view-only)" in the role dropdown on every user
+    // row, but the server validated against a hard-coded Admin/Pharmacist/StorageManager
+    // list that was never updated when HR was added - so picking it always failed.
+    const admin = await auth("admin");
+    const stamp = Date.now();
+
+    const created = await request.post(`${API_BASE}/api/Users/create`, {
+      headers: admin,
+      data: {
+        userName: `e2erolemove${stamp}`,
+        email: `rolemove${stamp}@example.test`,
+        password: "E2eRole#2026x",
+        role: "Pharmacist",
+      },
+    });
+    expect(created.status()).toBe(200);
+    const userId = (await created.json()).id;
+
+    const moved = await request.patch(`${API_BASE}/api/Users/${userId}/role`, {
+      headers: admin,
+      data: { role: "HR" },
+    });
+    expect(moved.status(), "moving a user to HR must be accepted").toBe(200);
+    expect((await moved.json()).role).toBe("HR");
+
+    // And it really took: the user reads back as HR.
+    const users = await request.get(`${API_BASE}/api/Users`, { headers: admin });
+    const found = (await users.json()).find((u: { id: string }) => u.id === userId);
+    expect(found.role).toBe("HR");
+
+    // A role that does not exist is still refused - the fix widened the set to AppRole,
+    // it did not remove the check.
+    const bogus = await request.patch(`${API_BASE}/api/Users/${userId}/role`, {
+      headers: admin,
+      data: { role: "Superuser" },
+    });
+    expect(bogus.status()).toBe(400);
+
+    await request.delete(`${API_BASE}/api/Users/${userId}`, { headers: admin });
+  });
+});
+
 test.describe("Referential integrity", () => {
   test("deleting a supplier does not silently destroy its purchase history", async ({ request }) => {
     // SupplyOrder.SupplierId is a required FK created with ON DELETE CASCADE, so the

@@ -91,13 +91,24 @@ public class UserService : IUserService
         return result;
     }
 
+    /// <summary>
+    /// Roles an existing user may be moved to.
+    ///
+    /// Derived from AppRole rather than retyped. This list was previously hard-coded as
+    /// Admin/Pharmacist/StorageManager and was not updated when HR was added, so the
+    /// "HR (view-only)" option the admin dashboard offers on every user row was rejected
+    /// by the server as an invalid role - a control that existed and could not work.
+    /// Creating an HR user went through a different path and did work, which is why the
+    /// gap was easy to miss.
+    /// </summary>
+    public static readonly string[] AssignableRoles = Enum.GetNames<AppRole>();
+
     public async Task<UserDto> UpdateUserRoleAsync(string userId, string newRole, string currentUserId)
     {
         // Validate role value - must be one of the allowed roles
-        var validRoles = new[] { "Admin", "Pharmacist", "StorageManager" };
-        if (!validRoles.Contains(newRole, StringComparer.OrdinalIgnoreCase))
+        if (!AssignableRoles.Contains(newRole, StringComparer.OrdinalIgnoreCase))
         {
-            throw new ArgumentException($"Invalid role. Must be one of: {string.Join(", ", validRoles)}");
+            throw new ArgumentException($"Invalid role. Must be one of: {string.Join(", ", AssignableRoles)}");
         }
 
         // Find the target user
