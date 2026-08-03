@@ -374,6 +374,92 @@ export default function StorageManagerDashboard() {
     );
   };
 
+  /**
+   * The expanded detail for one order: its items, the status timeline, and any notes.
+   *
+   * Shared by the table (>= sm) and the card list (< sm) so the two cannot drift.
+   * Duplicating it was the alternative, and a second copy of eighty lines of markup is
+   * how the "one copy was never updated" bugs in this project started.
+   */
+  const renderOrderDetails = (order: SupplyStock) => (
+    <div className="space-y-2">
+      <h4 className="font-medium text-sm mb-2">Order Items:</h4>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {order.items.map((item, idx) => (
+          <div
+            key={idx}
+            className={`p-3 rounded-lg ${darkMode ? "bg-gray-700" : "bg-white"} border ${
+              darkMode ? "border-gray-600" : "border-gray-200"
+            } flex items-center gap-3`}
+          >
+            {/* Medicine image */}
+            <div className="flex-shrink-0 w-14 h-14">
+              <img
+                src={buildImageUrl(item.medicineImageUrl)}
+                alt={item.medicineName}
+                className="w-full h-full object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = DEFAULT_MEDICINE_IMAGE;
+                }}
+              />
+            </div>
+            {/* Medicine details */}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{item.medicineName}</p>
+              <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Qty: {item.quantity} × ${item.unitPrice.toFixed(2)}
+              </p>
+              <p className={`text-sm font-semibold ${darkMode ? "text-purple-400" : "text-purple-600"}`}>
+                Total: ${(item.quantity * item.unitPrice).toFixed(2)}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Status Timeline */}
+      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+        <h4 className="font-medium text-sm mb-2">Status Timeline:</h4>
+        <div className="flex flex-wrap gap-4 text-xs">
+          {order.orderedAt && (
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              Ordered: {formatDate(order.orderedAt)}
+            </div>
+          )}
+          {order.shippedAt && (
+            <div className="flex items-center gap-1">
+              <Truck className="h-3 w-3" />
+              Shipped: {formatDate(order.shippedAt)}
+            </div>
+          )}
+          {order.receivedAt && (
+            <div className="flex items-center gap-1">
+              <Check className="h-3 w-3" />
+              Received: {formatDate(order.receivedAt)}
+            </div>
+          )}
+          {order.storedAt && (
+            <div className="flex items-center gap-1">
+              <Package className="h-3 w-3" />
+              Stored: {formatDate(order.storedAt)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {order.notes && (
+        <div className="mt-2 text-sm">
+          <span className="font-medium">Notes:</span> {order.notes}
+        </div>
+      )}
+    </div>
+  );
+
+  /** Toggles the expanded detail for an order. Same handler for both layouts. */
+  const toggleExpanded = (orderId: number) =>
+    setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
+
   // ──────────────────────────────────────────────────────────────────────────
   // Main Render
   // ──────────────────────────────────────────────────────────────────────────
@@ -566,14 +652,15 @@ export default function StorageManagerDashboard() {
             </div>
           ) : (
             <>
-              {/* Orders Table */}
-              {/* overflow-hidden here clipped the table instead of scrolling it: at
-                  360px the six columns need ~617px, so Status and Actions - the status
-                  dropdown being the whole point of this page - were cut off with no way
-                  to reach them. overflow-x-auto is what InvoiceModal and FinancePanel
-                  already do with their tables; this was the odd one out.
+              {/* Orders Table - sm and up.
+                  Below sm this is replaced by the card list further down: six columns
+                  need ~640px, and a phone that has to swipe sideways to reach the status
+                  control is not really using this page. overflow-x-auto still matters
+                  between sm and the width where the columns fit on their own, and it is
+                  what InvoiceModal and FinancePanel already do; this table used to be
+                  overflow-hidden, which clipped the last two columns away entirely.
                   rounded-lg is kept on the outer box, so the corners still clip. */}
-              <div className={`rounded-lg shadow overflow-x-auto ${darkMode ? "bg-gray-800" : "bg-white"}`}>
+              <div className={`hidden sm:block rounded-lg shadow overflow-x-auto ${darkMode ? "bg-gray-800" : "bg-white"}`}>
                 <table className="w-full min-w-[640px]">
                   <thead className={darkMode ? "bg-gray-700" : "bg-gray-50"}>
                     <tr>
@@ -613,7 +700,7 @@ export default function StorageManagerDashboard() {
                           </td>
                           <td className="px-4 py-4">
                             <button
-                              onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                              onClick={() => toggleExpanded(order.id)}
                               className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
                             >
                               {order.items.length} item(s)
@@ -639,78 +726,7 @@ export default function StorageManagerDashboard() {
                         {expandedOrderId === order.id && (
                           <tr>
                             <td colSpan={readOnly ? 5 : 6} className={`px-4 py-4 ${darkMode ? "bg-gray-750" : "bg-gray-50"}`}>
-                              <div className="space-y-2">
-                                <h4 className="font-medium text-sm mb-2">Order Items:</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {order.items.map((item, idx) => (
-                                    <div 
-                                      key={idx}
-                                      className={`p-3 rounded-lg ${darkMode ? "bg-gray-700" : "bg-white"} border ${
-                                        darkMode ? "border-gray-600" : "border-gray-200"
-                                      } flex items-center gap-3`}
-                                    >
-                                      {/* Medicine image */}
-                                      <div className="flex-shrink-0 w-14 h-14">
-                                        <img
-                                          src={buildImageUrl(item.medicineImageUrl)}
-                                          alt={item.medicineName}
-                                          className="w-full h-full object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700"
-                                          onError={(e) => {
-                                            (e.target as HTMLImageElement).src = DEFAULT_MEDICINE_IMAGE;
-                                          }}
-                                        />
-                                      </div>
-                                      {/* Medicine details */}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="font-medium truncate">{item.medicineName}</p>
-                                        <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                                          Qty: {item.quantity} × ${item.unitPrice.toFixed(2)}
-                                        </p>
-                                        <p className={`text-sm font-semibold ${darkMode ? "text-purple-400" : "text-purple-600"}`}>
-                                          Total: ${(item.quantity * item.unitPrice).toFixed(2)}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                                
-                                {/* Status Timeline */}
-                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                                  <h4 className="font-medium text-sm mb-2">Status Timeline:</h4>
-                                  <div className="flex flex-wrap gap-4 text-xs">
-                                    {order.orderedAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        Ordered: {formatDate(order.orderedAt)}
-                                      </div>
-                                    )}
-                                    {order.shippedAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Truck className="h-3 w-3" />
-                                        Shipped: {formatDate(order.shippedAt)}
-                                      </div>
-                                    )}
-                                    {order.receivedAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Check className="h-3 w-3" />
-                                        Received: {formatDate(order.receivedAt)}
-                                      </div>
-                                    )}
-                                    {order.storedAt && (
-                                      <div className="flex items-center gap-1">
-                                        <Package className="h-3 w-3" />
-                                        Stored: {formatDate(order.storedAt)}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {order.notes && (
-                                  <div className="mt-2 text-sm">
-                                    <span className="font-medium">Notes:</span> {order.notes}
-                                  </div>
-                                )}
-                              </div>
+                              {renderOrderDetails(order)}
                             </td>
                           </tr>
                         )}
@@ -718,6 +734,63 @@ export default function StorageManagerDashboard() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Orders as cards - below sm only.
+                  Same six fields as the table, stacked instead of columned, so the
+                  status control is reachable without a sideways swipe. Every field is
+                  labelled: a bare row of values reads fine under a table header and
+                  becomes a guessing game once the header is gone.
+                  Read-only viewers get renderStatusDropdown's badge fallback and no
+                  control, exactly as in the table - the rule lives in that helper, not
+                  in either layout. */}
+              <div className="sm:hidden space-y-3">
+                {paginatedOrders.map(order => (
+                  <div
+                    key={order.id}
+                    className={`rounded-lg shadow p-4 ${darkMode ? "bg-gray-800" : "bg-white"}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-medium">#{order.id}</span>
+                        <p className={`text-sm truncate ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                          {order.supplierName || "Unknown"}
+                        </p>
+                      </div>
+                      <div className="shrink-0">{renderStatusBadge(order.status)}</div>
+                    </div>
+
+                    <dl className="mt-3 text-sm">
+                      <div className="flex justify-between gap-3">
+                        <dt className={darkMode ? "text-gray-400" : "text-gray-500"}>Order Date</dt>
+                        {/* whitespace-nowrap: a date broken across two lines mid-figure
+                            is the sort of thing that reads as a rendering fault. */}
+                        <dd className="whitespace-nowrap">{formatDate(order.orderedAt || order.createdAt)}</dd>
+                      </div>
+                    </dl>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <button
+                        onClick={() => toggleExpanded(order.id)}
+                        className="flex items-center gap-1 min-h-[44px] text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
+                        aria-expanded={expandedOrderId === order.id}
+                      >
+                        {order.items.length} item(s)
+                        <ChevronDown className={`h-4 w-4 transition-transform ${
+                          expandedOrderId === order.id ? "rotate-180" : ""
+                        }`} />
+                      </button>
+
+                      {!readOnly && <div className="shrink-0">{renderStatusDropdown(order)}</div>}
+                    </div>
+
+                    {expandedOrderId === order.id && (
+                      <div className={`mt-3 pt-3 border-t ${darkMode ? "border-gray-700" : "border-gray-200"}`}>
+                        {renderOrderDetails(order)}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
 
               {/* Pagination */}

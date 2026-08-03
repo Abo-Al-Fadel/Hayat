@@ -295,12 +295,53 @@ test.describe("Storage manager fits a phone", () => {
     expect(await offscreenElements(page)).toEqual([]);
   });
 
-  test("the supply order table can be scrolled to its last column", async ({ page }) => {
-    // The table needs ~640px for six columns and the phone gives it ~330. That is
-    // fine - as long as the remainder is reachable. It used to sit in an
-    // overflow-hidden box, so Status and Actions were cut off entirely, and the
-    // status dropdown is the only control on this page.
+  test("below sm the orders become cards, with every column's data kept", async ({ page }) => {
+    // Six columns need ~640px and a phone gives ~330. The table now stops at sm and a
+    // card list takes over, so the status control - the only control on this page - is
+    // reachable without a sideways swipe. Before the card list it was a table in an
+    // overflow-hidden box, and Status and Actions were simply cut off.
     await page.setViewportSize({ width: 360, height: 640 });
+    await clearSession(page);
+    await loginAs(page, "storage");
+    await page.waitForTimeout(1500);
+
+    // No table at this width.
+    await expect(page.locator("table")).toBeHidden();
+
+    // Everything the table columns carried is still on screen: order number,
+    // supplier, item count, date, status, and the control to advance it.
+    // Attribute-contains rather than a class selector: "sm:hidden" needs escaping as
+    // a CSS class and the escape is easy to lose.
+    const firstCard = page.locator('[class*="sm:hidden"] > div').first();
+    await expect(firstCard).toBeVisible({ timeout: 15_000 });
+    await expect(firstCard).toContainText(/#\d+/);
+    await expect(firstCard).toContainText("Order Date");
+    await expect(firstCard.getByRole("button", { name: /item\(s\)/ })).toBeVisible();
+
+    const statusControl = firstCard.locator("select");
+    await expect(statusControl).toBeVisible();
+
+    // The control sits fully inside the screen - the whole point of the change.
+    const box = await statusControl.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width, "status control runs off a 360px screen").toBeLessThanOrEqual(361);
+
+    // No sideways scrolling anywhere, and nothing amputated.
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+    expect(await clippedContent(page)).toEqual([]);
+
+    // Expanding an order still works, and still fits.
+    await firstCard.getByRole("button", { name: /item\(s\)/ }).click();
+    await expect(firstCard).toContainText("Order Items:");
+    await expect(firstCard).toContainText("Status Timeline:");
+    expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+  });
+
+  test("the table is still the layout from sm up, and scrolls rather than clips", async ({ page }) => {
+    // The card list is a phone affordance, not a replacement. At tablet width and
+    // above the table comes back, and its box must scroll - it was overflow-hidden,
+    // which is what cut the last two columns off in the first place.
+    await page.setViewportSize({ width: 768, height: 1024 });
     await clearSession(page);
     await loginAs(page, "storage");
     await page.waitForTimeout(1500);
@@ -309,26 +350,37 @@ test.describe("Storage manager fits a phone", () => {
     await expect(table).toBeVisible({ timeout: 15_000 });
 
     const scroller = page.locator("div:has(> table)").last();
-    const before = await scroller.evaluate((el) => ({
-      overflowX: getComputedStyle(el).overflowX,
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
-    }));
+    const overflowX = await scroller.evaluate((el) => getComputedStyle(el).overflowX);
+    expect(["auto", "scroll"], "the table's box must scroll, not clip").toContain(overflowX);
 
-    // Wider than its box - so it must be a scroller, not a clipper.
-    expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
-    expect(["auto", "scroll"], "the table's box must scroll, not clip").toContain(before.overflowX);
-
-    // And scrolling actually reaches the end.
-    await scroller.evaluate((el) => el.scrollTo({ left: el.scrollWidth }));
-    const scrolledTo = await scroller.evaluate((el) => el.scrollLeft);
-    expect(scrolledTo).toBeGreaterThan(0);
-
-    // The header cell of the last column is now inside the viewport.
+    // Last column header is reachable at this width.
     const lastHeader = page.locator("table thead th").last();
     const box = await lastHeader.boundingBox();
-    expect(box!.x).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(360 + 1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(769);
+  });
+
+  test("the card layout offers the read-only observer no control", async ({ page }) => {
+    // A new layout is a new place to leak a write control. HR reaches no write
+    // endpoint server-side either way, but a control that only ever 403s is a broken
+    // button, and the existing readonly sweep checks the table's Actions column -
+    // which does not exist at this width.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await clearSession(page);
+    await loginAs(page, "hr");
+
+    await page.goto("/storage");
+    await expect(page).toHaveURL(/\/storage$/);
+    await expect(page.getByText(/view-only access/i)).toBeVisible();
+    await page.waitForTimeout(1500);
+
+    const cards = page.locator('[class*="sm:hidden"] > div');
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+
+    // The status badge is still shown - HR can see where each order stands.
+    await expect(cards.first()).toContainText(/#\d+/);
+
+    // But nothing to change it with.
+    await expect(cards.locator("select")).toHaveCount(0);
   });
 });
 
@@ -399,7 +451,11 @@ test.describe("Confirmation dialogs are usable on a phone", () => {
 
       // Advancing a supply order raises the shared ConfirmModal. Nothing is written:
       // the dialog is dismissed, never confirmed.
-      const statusSelect = page.locator("select").first();
+      //
+      // ":visible" matters: below sm the table is still in the DOM behind a
+      // `hidden sm:block`, so a plain .first() picks that layout's select - present,
+      // but display:none and unclickable.
+      const statusSelect = page.locator("select:visible").first();
       await expect(statusSelect).toBeVisible({ timeout: 15_000 });
       const options = (await statusSelect.locator("option").allTextContents())
         .map((o) => o.trim())
