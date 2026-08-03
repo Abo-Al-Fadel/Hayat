@@ -76,8 +76,12 @@ addresses before assuming anything else broke.
 You should end up with something like:
 
 ```
-Server=tcp:hayat-sql.database.windows.net,1433;Initial Catalog=hayat;Persist Security Info=False;User ID=hayatadmin;Password=REPLACE_ME;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
+Server=tcp:<your-server>.database.windows.net,1433;Initial Catalog=<your-database>;Persist Security Info=False;User ID=<your-admin-user>;Password=<your-password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
 ```
+
+Every angle-bracketed value is yours to fill in. They are placeholders on purpose: this
+file is public, and a real server hostname plus a real admin username is most of what an
+attacker needs before they start guessing passwords.
 
 > **You do not need to create any tables.** The API applies its own migrations on first start and logs `Applying N pending migration(s)`. Verified against an empty database: 22 migrations, 18 tables.
 
