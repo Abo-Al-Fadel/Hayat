@@ -1712,9 +1712,15 @@ export default function AdminDashboard() {
                           user.role.toLowerCase().includes(term)
                         );
                       })
+                      // Row stacks below sm. As a single justify-between row it needed
+                      // ~500px, and the panel around it is overflow-hidden (for its
+                      // rounded corners), so at 360px the right-hand cluster - role
+                      // dropdown, edit and delete - was cut off rather than wrapped,
+                      // leaving no way to manage an account from a phone. sm: and up
+                      // is the original row, unchanged.
                       .map((user) => (
-                      <div key={user.id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <div className="flex items-center gap-4">
+                      <div key={user.id} className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div className="flex items-center gap-4 min-w-0">
                           {/* User Avatar with role-based color - DISTINCT colors per role */}
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                             user.role.toLowerCase() === "admin" 

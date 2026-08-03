@@ -332,3 +332,31 @@ test.describe("Storage manager fits a phone", () => {
   });
 });
 
+
+test.describe("Admin sections are not clipped on a phone", () => {
+  for (const theme of THEMES) {
+    test(`Users section keeps its row controls reachable (${theme})`, async ({ page }) => {
+      // Each row is a justify-between flex: identity on the left, role dropdown and
+      // the edit/delete buttons on the right. Inside an overflow-hidden panel at
+      // 360px the right-hand cluster was cut off, so an admin on a phone could not
+      // change a role or remove an account at all.
+      await page.setViewportSize({ width: 360, height: 640 });
+      await clearSession(page);
+      await useTheme(page, theme);
+      await loginAs(page, "admin");
+
+      await page.getByRole("button", { name: /open navigation|menu/i }).first().click();
+      await page.getByRole("button", { name: "Users", exact: true }).click();
+      await page.waitForTimeout(1500);
+
+      expect(await clippedContent(page), `Users @360 ${theme}`).toEqual([]);
+
+      // The role dropdown is fully on screen, not half past the right edge.
+      const roleSelect = page.locator("select").first();
+      await expect(roleSelect).toBeVisible();
+      const box = await roleSelect.boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, "role dropdown runs off the screen").toBeLessThanOrEqual(361);
+    });
+  }
+});
