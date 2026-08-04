@@ -443,30 +443,85 @@ test.describe("Homepage hero", () => {
     });
   }
 
-  test("the decorative quote marks do not float loose on a phone", async ({ page }) => {
-    // They are pinned to the edges of a paragraph that is the full width of the
-    // screen, so on a phone they detached from the words and read as stray
-    // punctuation in the corners. They are hidden below sm now.
-    await page.setViewportSize({ width: 360, height: 640 });
+  /**
+   * How far each painted quote glyph sits from the sentence it belongs to.
+   *
+   * Measured against the text's own line boxes, via a Range, rather than against the
+   * paragraph element. That distinction is the whole point: the paragraph is capped at
+   * max-w-lg and the sentence is centred inside it, so a mark pinned to the paragraph's
+   * edge can be 90px from the nearest word while still being flush with its container.
+   * Comparing against the element sees nothing wrong, which is why the earlier version
+   * of this check passed on the broken layout.
+   */
+  async function quoteMarkGaps(page: Page): Promise<number[]> {
+    return page.evaluate(() => {
+      const marks = Array.from(document.querySelectorAll<HTMLElement>("span")).filter((s) =>
+        /^[“”]$/.test((s.textContent || "").trim())
+      );
+
+      return marks
+        .filter((m) => m.getBoundingClientRect().width > 0)
+        .map((m) => {
+          const para = m.closest("p")!;
+          const textNode = Array.from(para.childNodes).find(
+            (n) => n.nodeType === Node.TEXT_NODE && (n.textContent || "").trim().length > 5
+          )!;
+          const range = document.createRange();
+          range.selectNodeContents(textNode);
+
+          const mark = m.getBoundingClientRect();
+          // One rect per line box, so a wrapped sentence is measured against the line
+          // the mark actually sits on rather than the full block.
+          return Math.min(
+            ...Array.from(range.getClientRects()).map((r) => {
+              const dx = Math.max(r.left - mark.right, mark.left - r.right, 0);
+              const dy = Math.max(r.top - mark.bottom, mark.top - r.bottom, 0);
+              return Math.round(Math.hypot(dx, dy));
+            })
+          );
+        });
+    });
+  }
+
+  for (const size of [
+    { name: "360", width: 360, height: 640 },
+    { name: "390", width: 390, height: 844 },
+    // The width the owner reported from: just above sm, so the absolutely positioned
+    // pair was painted and floating ~90px clear of the words on either side.
+    { name: "655", width: 655, height: 1080 },
+  ]) {
+    test(`the quote marks sit against the words, not the container @${size.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(500);
+
+      const gaps = await quoteMarkGaps(page);
+
+      expect(gaps.length, "no quote glyph is painted at all at this width").toBeGreaterThan(0);
+      for (const gap of gaps) {
+        expect(gap, `a quote glyph sits ${gap}px from the nearest word - it reads as stray punctuation`).toBeLessThanOrEqual(12);
+      }
+    });
+  }
+
+  test("the decorative pair is still the one used from md up", async ({ page }) => {
+    // The phone fix swaps in inline marks below md. This is the other half of it: the
+    // large offset pair the desktop design is built around must still be painted at
+    // 768 and above, and only that pair.
+    await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto("/");
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(500);
 
-    const strays = await page.evaluate(() => {
-      const marks = Array.from(document.querySelectorAll<HTMLElement>("span")).filter((s) =>
-        /^[“”]$/.test((s.textContent || "").trim())
-      );
-      // Anything still painted, and how far it sits from the text it belongs to.
-      return marks
-        .filter((m) => m.getBoundingClientRect().width > 0)
-        .map((m) => {
-          const mark = m.getBoundingClientRect();
-          const para = m.closest("p")!.getBoundingClientRect();
-          return Math.round(Math.min(Math.abs(mark.left - para.left), Math.abs(mark.right - para.right)));
-        });
-    });
+    const painted = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>("span"))
+        .filter((s) => /^[“”]$/.test((s.textContent || "").trim()))
+        .filter((s) => s.getBoundingClientRect().width > 0)
+        .map((s) => getComputedStyle(s).position)
+    );
 
-    expect(strays, "a quote glyph is still rendered at this width").toEqual([]);
+    expect(painted, "expected exactly the two absolutely positioned marks").toEqual(["absolute", "absolute"]);
   });
 });
 
