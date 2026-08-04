@@ -73,15 +73,16 @@ const Home = () => {
           </div>
 
           <div className="relative flex justify-center lg:justify-end items-center">
-            {/* rotate-60 makes the painted box far taller than the layout box, and a
-                rotation contributes nothing to scroll height - so on a short phone
-                (360x640) the bottle simply ran off the bottom of the page with no way
-                to scroll to it. A gentler tilt below lg keeps the motion without the
-                overhang; the full rotation returns where there is room for it. */}
+            {/* rotate-60 is not a real class - Tailwind's rotate scale is
+                0/1/2/3/6/12/45/90/180 and theme.extend is empty - so it has always been
+                a no-op and the bottle's tilt comes from the artwork itself. Left exactly
+                as written: replacing it with an arbitrary value like rotate-[25deg]
+                would silently start rotating the image for the first time, and would
+                widen the hover swing, since hover:-rotate-3 is an absolute angle. */}
             <img
               src={logo}
               alt="Medicine bottle"
-              className="w-[150px] sm:w-[230px] md:w-[280px] lg:w-[380px] transform rotate-[25deg] lg:rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
+              className="w-[180px] sm:w-[260px] md:w-[320px] lg:w-[380px] transform rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
               style={{ filter: "drop-shadow(-30px 90px 20px rgba(2, 6, 23, 0.24))" }}
             />
           </div>
