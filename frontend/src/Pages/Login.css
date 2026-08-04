@@ -1,7 +1,10 @@
 .bg-loginpage {
   /* Solid colour first so there is no white gap while the artwork downloads. */
   background-color: #0b3f7a;
-  background-image: url('../Images/loginBack.png');
+  /* WebP: the same image as a PNG was 1.5 MB - two and a half times the whole
+     application bundle - and it is the first thing a visitor downloads, on the login
+     page, before anything else can happen. 22 KB now, visually identical. */
+  background-image: url('../Images/loginBack.webp');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

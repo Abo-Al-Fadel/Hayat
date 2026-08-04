@@ -1,5 +1,5 @@
 import React from "react";
-import logo from "../Images/medicine-bottle.png";
+import logo from "../Images/medicine-bottle.webp";
 import "./Home.css";
 import leaf from "../Images/leaf.png";
 import { useNavigate } from "react-router-dom";
