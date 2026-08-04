@@ -413,6 +413,63 @@ test.describe("Nothing is clipped out of reach", () => {
   }
 });
 
+test.describe("Homepage hero", () => {
+  for (const size of SMALL_SIZES) {
+    test(`the headline and the product image do not collide @${size.name}`, async ({ page }) => {
+      // At exactly 768 the md: two-column grid put 72px type in a 288px column. The
+      // headline overflowed its own column and the bottle in the next one was painted
+      // straight over it - "Pharmacy Stock Management." was unreadable. Nothing failed;
+      // it just looked broken, which is the worst kind of bug on a landing page.
+      await page.setViewportSize({ width: size.width, height: size.height });
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(500);
+
+      // Measured as text overflowing its own column, not as two rectangles
+      // intersecting. The headline's layout box stayed inside its grid column - it was
+      // the painted glyphs that spilled out of it and under the image, because
+      // sm:whitespace-nowrap forbids wrapping and the type was far too large for the
+      // column the md grid had given it. Comparing bounding boxes sees nothing wrong.
+      const headline = await page.evaluate(() => {
+        const h1 = document.querySelector<HTMLElement>("h1")!;
+        return { scrollWidth: h1.scrollWidth, clientWidth: h1.clientWidth };
+      });
+
+      expect(
+        headline.scrollWidth,
+        `the headline needs ${headline.scrollWidth}px but its column is ${headline.clientWidth}px, ` +
+          `so it spills over whatever is beside it`
+      ).toBeLessThanOrEqual(headline.clientWidth + 1);
+    });
+  }
+
+  test("the decorative quote marks do not float loose on a phone", async ({ page }) => {
+    // They are pinned to the edges of a paragraph that is the full width of the
+    // screen, so on a phone they detached from the words and read as stray
+    // punctuation in the corners. They are hidden below sm now.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
+
+    const strays = await page.evaluate(() => {
+      const marks = Array.from(document.querySelectorAll<HTMLElement>("span")).filter((s) =>
+        /^[“”]$/.test((s.textContent || "").trim())
+      );
+      // Anything still painted, and how far it sits from the text it belongs to.
+      return marks
+        .filter((m) => m.getBoundingClientRect().width > 0)
+        .map((m) => {
+          const mark = m.getBoundingClientRect();
+          const para = m.closest("p")!.getBoundingClientRect();
+          return Math.round(Math.min(Math.abs(mark.left - para.left), Math.abs(mark.right - para.right)));
+        });
+    });
+
+    expect(strays, "a quote glyph is still rendered at this width").toEqual([]);
+  });
+});
+
 test.describe("Tap targets on a phone", () => {
   test("the category chip controls are big enough to hit", async ({ page }) => {
     // Edit and delete sat side by side at 22px square - under WCAG 2.2 SC 2.5.8's

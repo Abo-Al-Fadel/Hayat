@@ -31,17 +31,26 @@ const Home = () => {
         {/* Slogan under nav */}
         <div className="text-center mt-6 md:mt-10 max-w-lg mx-auto">
         <p className="italic text-gray-200/70 text-xl md:text-2xl font-serif leading-snug md:leading-relaxed relative">
-          <span className="absolute -left-2 -top-4 text-5xl md:text-6xl text-gray-400/50 font-serif">“</span>
+          {/* The decorative quotes are pinned to the edges of this paragraph, which is
+              the full width of the screen on a phone - so they detached from the words
+              and read as stray punctuation in the corners. They only make sense once
+              the line is wide enough for them to sit beside it. */}
+          <span className="hidden sm:block absolute -left-2 -top-4 text-5xl md:text-6xl text-gray-400/50 font-serif">“</span>
           We will serve you with our eyelashes
-          <span className="absolute -right-2 -bottom-4 text-5xl md:text-6xl text-gray-400/50 font-serif">”</span>
+          <span className="hidden sm:block absolute -right-2 -bottom-4 text-5xl md:text-6xl text-gray-400/50 font-serif">”</span>
         </p>
         <div className="mt-3 h-1 w-28 bg-gray-400/50 mx-auto rounded-full"></div>
         </div>
       {/* Hero Section */}
-      <main className="relative z-20 py-12 md:py-20 ">
-        <div className="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-2 items-center gap-8">
-          <div className="md:pl-6 lg:pl-12 xl:pl-20 relative -translate-y-4 md:-translate-y-12">
-            <h1 className="font-extrabold text-[32px] sm:text-[44px] md:text-[72px] leading-[1.1]">
+      <main className="relative z-20 py-8 sm:py-12 lg:py-20 ">
+        {/* Two columns from lg, not md. At exactly 768px the md grid split the screen
+            in half and put 72px type in a 288px column, so the headline overflowed its
+            own column and the bottle in the next one landed on top of it - the words
+            "Pharmacy Stock Management." were unreadable behind the image. A tablet now
+            gets the same stacked layout as a phone, which it has the width to carry. */}
+        <div className="max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-2 items-center gap-8">
+          <div className="lg:pl-12 xl:pl-20 relative lg:-translate-y-12">
+            <h1 className="font-extrabold text-[32px] sm:text-[44px] md:text-[56px] lg:text-[72px] leading-[1.1]">
               <span className="sm:whitespace-nowrap">Pharmacy Stock</span>
               <br />
               Management.
@@ -63,22 +72,27 @@ const Home = () => {
             </div>
           </div>
 
-          <div className="relative flex justify-center md:justify-end items-center">
+          <div className="relative flex justify-center lg:justify-end items-center">
+            {/* rotate-60 makes the painted box far taller than the layout box, and a
+                rotation contributes nothing to scroll height - so on a short phone
+                (360x640) the bottle simply ran off the bottom of the page with no way
+                to scroll to it. A gentler tilt below lg keeps the motion without the
+                overhang; the full rotation returns where there is room for it. */}
             <img
               src={logo}
               alt="Medicine bottle"
-              className="w-[180px] sm:w-[260px] md:w-[320px] lg:w-[380px] transform rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
+              className="w-[150px] sm:w-[230px] md:w-[280px] lg:w-[380px] transform rotate-[25deg] lg:rotate-60 drop-shadow-2xl transition-transform duration-500 hover:-rotate-3 hover:scale-105"
               style={{ filter: "drop-shadow(-30px 90px 20px rgba(2, 6, 23, 0.24))" }}
             />
           </div>
         </div>
 
         {/* Decorative leaves */}
-        <img src={leaf} alt="leaf left" className="hidden md:block absolute left-6 top-20 w-30 opacity-100 transform -rotate-45 pointer-events-none" />
-        <img src={leaf} alt="leaf right" className="hidden md:block absolute right-11 top-2 w-20 opacity-100 transform rotate-6 pointer-events-none" />
-        <img src={leaf} alt="leaf left" className="hidden md:block absolute left-16 top-34 w-14 opacity-100 transform -rotate-65 pointer-events-none" />
-        <img src={leaf} alt="leaf right" className="hidden md:block absolute right-12 top-41 w-12 opacity-100 transform -rotate-90 pointer-events-none" />
-        <img src={leaf} alt="leaf middle" className="hidden md:block absolute left-1/2 top-1/2 w-21 opacity-100 transform -translate-x-1/2 translate-y-1/2 -rotate-45 pointer-events-none" />
+        <img src={leaf} alt="leaf left" className="hidden lg:block absolute left-6 top-20 w-30 opacity-100 transform -rotate-45 pointer-events-none" />
+        <img src={leaf} alt="leaf right" className="hidden lg:block absolute right-11 top-2 w-20 opacity-100 transform rotate-6 pointer-events-none" />
+        <img src={leaf} alt="leaf left" className="hidden lg:block absolute left-16 top-34 w-14 opacity-100 transform -rotate-65 pointer-events-none" />
+        <img src={leaf} alt="leaf right" className="hidden lg:block absolute right-12 top-41 w-12 opacity-100 transform -rotate-90 pointer-events-none" />
+        <img src={leaf} alt="leaf middle" className="hidden lg:block absolute left-1/2 top-1/2 w-21 opacity-100 transform -translate-x-1/2 translate-y-1/2 -rotate-45 pointer-events-none" />
       </main>
     </div>
   );
