@@ -46,36 +46,34 @@ export function PublicHeader({ active }: PublicHeaderProps) {
     navigate("/login", { replace: true });
   };
 
+  // Tighter below md so the logo, both nav entries and the profile control fit on one
+  // row on a phone - at the md sizing they need ~313px of a 320px screen, which is the
+  // kind of margin that survives a screenshot and nothing else. md up is unchanged.
   const navButton = (isActive: boolean) =>
-    `px-5 py-2 rounded-full text-sm transition-colors ${
+    `px-3 py-1.5 text-xs md:px-5 md:py-2 md:text-sm whitespace-nowrap rounded-full transition-colors ${
       isActive ? "bg-[#00274d] ring-2 ring-white/40" : "bg-[#003465] hover:bg-blue-900"
     }`;
 
   return (
-    <header className="relative z-20 flex flex-wrap items-center justify-between gap-3 py-4 sm:py-6">
-      {/* Logo + name */}
+    <header className="relative z-20 flex flex-wrap items-center justify-between gap-2 md:gap-3 py-4 sm:py-6">
+      {/* Logo + name. Stacked below md so the mark reads as a badge rather than a
+          strip of header, side by side from md up as before. */}
       <button
         onClick={() => navigate("/")}
-        className="flex items-center gap-3 pl-0 md:pl-8 min-w-0"
+        className="flex flex-col md:flex-row items-center gap-1 md:gap-3 pl-0 md:pl-8 min-w-0"
         aria-label="Hayat home"
       >
         <img src={hayat} alt="Hayat" className="h-10 w-10 object-contain" />
-        <span
-          className="exported-logo"
-          style={{
-            fontFamily: "Winslowtitle Boldnarrow",
-            fontSize: "1.75rem",
-            color: "white",
-            textShadow: "2px 1px 2px rgba(255, 255, 255, 0.31)",
-            transform: "translateY(4px)",
-          }}
-        >
-          Hayat
-        </span>
+        {/* .wordmark carries the face, tracking, shadow and nudge - see index.css. It
+            has to be a class rather than the inline styles this used to have, because
+            inline styles cannot answer a media query. */}
+        <span className="wordmark text-[1.15rem] md:text-[1.75rem] text-white">Hayat</span>
       </button>
 
-      {/* Centre nav - in flow on mobile, absolutely centred from md up */}
-      <nav className="order-3 w-full flex justify-center gap-3 md:order-none md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2 md:top-8">
+      {/* Centre nav. In flow on a phone, where the header's justify-between is what puts
+          it between the logo and the profile control on a single row; taken out of flow
+          and absolutely centred from md up, as before. */}
+      <nav className="flex gap-2 md:gap-3 md:absolute md:left-1/2 md:-translate-x-1/2 md:top-8">
         {/* Never marked active: it leads into a dashboard, not a public page. */}
         <button className={navButton(false)} onClick={goToApp}>
           Products

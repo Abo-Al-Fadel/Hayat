@@ -525,6 +525,44 @@ test.describe("Homepage hero", () => {
   });
 });
 
+test.describe("Public header on a phone", () => {
+  // 320 included deliberately: at the md button sizing the four controls need ~313px of
+  // it, so this is the width that decides whether the row holds or wraps.
+  for (const width of [320, 360, 390, 655]) {
+    test(`the logo, both nav entries and the profile control share one row @${width}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(400);
+
+      const rows = await page.evaluate(() => {
+        const header = document.querySelector("header")!;
+        const items = [
+          header.querySelector<HTMLElement>('button[aria-label="Hayat home"]')!,
+          ...Array.from(header.querySelectorAll<HTMLElement>("nav button")),
+          header.querySelector<HTMLElement>("div button")!,
+        ];
+        // Vertical centres, not tops: the controls are deliberately different heights.
+        return items.map((el) => {
+          const b = el.getBoundingClientRect();
+          return Math.round(b.top + b.height / 2);
+        });
+      });
+
+      expect(rows).toHaveLength(4);
+      const spread = Math.max(...rows) - Math.min(...rows);
+      expect(
+        spread,
+        `the four header controls span ${spread}px vertically, so at least one has wrapped to its own row`
+      ).toBeLessThanOrEqual(8);
+
+      expect(await horizontalOverflow(page)).toBeLessThanOrEqual(1);
+    });
+  }
+});
+
 test.describe("Tap targets on a phone", () => {
   test("the category chip controls are big enough to hit", async ({ page }) => {
     // Edit and delete sat side by side at 22px square - under WCAG 2.2 SC 2.5.8's
